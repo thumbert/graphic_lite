@@ -41,21 +41,11 @@ class _MyHomePageState extends State<MyHomePage> {
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: Text(widget.title),
       ),
-      body: Center(
+      body: Padding(
+        padding: const EdgeInsets.all(32.0),
         child: Column(
-          mainAxisAlignment: .center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(32.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  // Chart(traces: traces),
-                  SizedBox(height: 500, child: Chart(traces: traces)),
-                ],
-              ),
-            ),
-          ],
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[Expanded(child: Chart(traces: traces))],
         ),
       ),
     );

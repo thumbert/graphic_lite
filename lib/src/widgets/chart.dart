@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:graphic_lite/graphic_lite.dart';
 import 'package:graphic/graphic.dart' as g;
@@ -14,12 +16,117 @@ class Chart extends StatefulWidget {
 }
 
 class _ChartState extends State<Chart> {
+  final GlobalKey _chartKey = GlobalKey();
   late List<bool> traceVisible;
+  late List<Map<String, dynamic>> data;
+
+  final StreamController<g.GestureEvent> _gestureController =
+      StreamController<g.GestureEvent>.broadcast();
+  StreamSubscription<g.GestureEvent>? _gestureSub;
+  Offset? _dragStart;
+  List<Map<String, dynamic>> _filteredData = [];
+  List<double>? _currentSelectionNormalized;
 
   @override
   void initState() {
     super.initState();
     traceVisible = List.filled(widget.traces.length, true);
+    _gestureSub = _gestureController.stream.listen((event) {
+      try {
+        final ge = event as g.GestureEvent;
+        final geg = ge.gesture;
+
+        if (geg.type == g.GestureType.scaleStart) {
+          final details = geg.details as ScaleStartDetails;
+          final chartBox =
+              _chartKey.currentContext?.findRenderObject() as RenderBox?;
+          if (chartBox == null) return;
+          // store local chart coordinates for the drag start
+          _dragStart = chartBox.globalToLocal(details.focalPoint);
+          // start live selection
+          setState(() {
+            _currentSelectionNormalized = null;
+          });
+        } else if (geg.type == g.GestureType.scaleUpdate &&
+            _dragStart != null) {
+          // live update of selection while dragging
+          final chartBox =
+              _chartKey.currentContext?.findRenderObject() as RenderBox?;
+          if (chartBox == null) return;
+          final localEnd = geg.localPosition;
+          const leftPad = 40.0;
+          const rightPad = 10.0;
+          final localStart = _dragStart!;
+          final left = localStart.dx < localEnd.dx
+              ? localStart.dx
+              : localEnd.dx;
+          final right = localStart.dx < localEnd.dx
+              ? localEnd.dx
+              : localStart.dx;
+          final width = chartBox.size.width - leftPad - rightPad;
+          if (width <= 0) return;
+          double nx0 = ((left - leftPad) / width).clamp(0.0, 1.0);
+          double nx1 = ((right - leftPad) / width).clamp(0.0, 1.0);
+          if (nx1 <= nx0) return;
+          setState(() {
+            _currentSelectionNormalized = [nx0, nx1];
+          });
+        } else if (geg.type == g.GestureType.scaleEnd && _dragStart != null) {
+          final chartBox =
+              _chartKey.currentContext?.findRenderObject() as RenderBox?;
+          if (chartBox == null) return;
+
+          // gesture.localPosition is already local to the chart
+          final localEnd = geg.localPosition;
+
+          // Adjust these paddings to match your chart layout if needed.
+          const leftPad = 40.0;
+          const rightPad = 10.0;
+          final localStart = _dragStart!;
+          final left = localStart.dx < localEnd.dx
+              ? localStart.dx
+              : localEnd.dx;
+          final right = localStart.dx < localEnd.dx
+              ? localEnd.dx
+              : localStart.dx;
+          final width = chartBox.size.width - leftPad - rightPad;
+          if (width <= 0) return;
+
+          double nx0 = ((left - leftPad) / width).clamp(0.0, 1.0);
+          double nx1 = ((right - leftPad) / width).clamp(0.0, 1.0);
+          if (nx1 <= nx0) return;
+
+          final firstMs = 1.0;
+          final lastMs = 5.0;
+          final selMin = firstMs + nx0 * (lastMs - firstMs);
+          final selMax = firstMs + nx1 * (lastMs - firstMs);
+
+          setState(() {
+            _filteredData = data.where((e) {
+              return e['x'] >= selMin && e['x'] <= selMax;
+            }).toList();
+            // clear live selection overlay once selection is committed
+            _currentSelectionNormalized = null;
+          });
+
+          _dragStart = null;
+        } else if (geg.type == g.GestureType.doubleTap) {
+          setState(() {
+            _filteredData = [];
+            _currentSelectionNormalized = null;
+          });
+        }
+      } catch (err) {
+        // swallow any cast errors or runtime hiccups during gesture handling
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _gestureSub?.cancel();
+    _gestureController.close();
+    super.dispose();
   }
 
   List<Map<String, dynamic>> makeData(List<ScatterTrace> traces) {
@@ -83,55 +190,91 @@ class _ChartState extends State<Chart> {
 
   @override
   Widget build(BuildContext context) {
-    final data = makeData(widget.traces);
+    data = makeData(widget.traces);
     final variables = makeVariables(data);
     final marks = makeMarks(widget.traces);
-    return Stack(
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        g.Chart(
-          padding: (_) => const EdgeInsets.fromLTRB(40, 5, 80, 40),
-          data: data,
-          variables: variables,
-          marks: marks,
-          coord: g.RectCoord(horizontalRange: [0, 1], verticalRange: [0, 1]),
-          axes: [
-            g.AxisGuide(
-              grid: g.Defaults.strokeStyle,
-              label: g.LabelStyle(
-                textStyle: Defaults.textStyle.copyWith(color: Colors.black),
-                offset: const Offset(0, 7.5),
-              ),
-            ),
-            g.AxisGuide(
-              grid: g.Defaults.strokeStyle,
-              label: g.LabelStyle(
-                textStyle: Defaults.textStyle.copyWith(color: Colors.black),
-                offset: const Offset(-7.5, 0),
-              ),
-            ),
-          ],
-          selections: {
-            // 'choose': IntervalSelection(),
-            'touchMove': g.PointSelection(
-              on: {
-                g.GestureType.tapDown,
-                // GestureType.scaleEnd,
-                // GestureType.longPressMoveUpdate,
-              },
-              dim: g.Dim.x,
-            ),
-            'zoom': g.IntervalSelection(dim: g.Dim.x),
-          },
-          tooltip: g.TooltipGuide(
-            followPointer: [false, true],
-            align: Alignment.topLeft,
-            offset: const Offset(-20, -20),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              const leftPad = 40.0;
+              const rightPad = 10.0;
+              final usableWidth = constraints.maxWidth - leftPad - rightPad;
+              return Container(
+                key: _chartKey,
+                child: Stack(
+                  children: [
+                    g.Chart(
+                      padding: (_) => const EdgeInsets.fromLTRB(40, 5, 80, 40),
+                      data: _filteredData.isNotEmpty ? _filteredData : data,
+                      variables: variables,
+                      marks: marks,
+                      coord: g.RectCoord(
+                        horizontalRange: [0, 1],
+                        verticalRange: [0, 1],
+                      ),
+                      axes: [
+                        g.AxisGuide(
+                          grid: g.Defaults.strokeStyle,
+                          label: g.LabelStyle(
+                            textStyle: Defaults.textStyle.copyWith(
+                              color: Colors.black,
+                            ),
+                            offset: const Offset(0, 7.5),
+                          ),
+                        ),
+                        g.AxisGuide(
+                          grid: g.Defaults.strokeStyle,
+                          label: g.LabelStyle(
+                            textStyle: Defaults.textStyle.copyWith(
+                              color: Colors.black,
+                            ),
+                            offset: const Offset(-7.5, 0),
+                          ),
+                        ),
+                      ],
+                      selections: {
+                        // 'choose': IntervalSelection(),
+                        'touchMove': g.PointSelection(
+                          on: {g.GestureType.tapDown},
+                          dim: g.Dim.x,
+                        ),
+                        // 'zoom': g.IntervalSelection(dim: g.Dim.x),
+                      },
+                      tooltip: g.TooltipGuide(
+                        followPointer: [false, true],
+                        align: Alignment.topLeft,
+                        offset: const Offset(-20, -20),
+                      ),
+                      crosshair: g.CrosshairGuide(
+                        followPointer: [false, false],
+                      ),
+                      gestureStream: _gestureController,
+                    ),
+                    if (_currentSelectionNormalized != null)
+                      Positioned(
+                        left:
+                            leftPad +
+                            _currentSelectionNormalized![0] * usableWidth,
+                        top: 0,
+                        bottom: 0,
+                        width:
+                            (_currentSelectionNormalized![1] -
+                                _currentSelectionNormalized![0]) *
+                            usableWidth,
+                        child: IgnorePointer(
+                          child: Container(color: Colors.grey.withAlpha(64)),
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            },
           ),
-          // crosshair: CrosshairGuide(
-          //   followPointer: [false, false],
-          // ),
         ),
-        Positioned(right: 0, top: 5, width: 100, child: _buildLegend()),
+        SizedBox(width: 100, child: _buildLegend()),
       ],
     );
   }
