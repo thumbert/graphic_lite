@@ -14,20 +14,10 @@ class ScatterTrace {
   }) {
     assert(x.length == y.length);
   }
-
   List<dynamic> x;
   List<num> y;
 
   String? name;
-  TraceVisibility visible = TraceVisibility.on;
-
-  String legend = 'legend';
-  int legendRank = 1000;
-  String legendGroup = '';
-  LegendGroupTitle? legendGroupTitle;
-  num? legendWidth;
-
-  num opacity = 1;
 
   /// Any combination of "lines", "markers", "text" joined with a "+" OR "none".
   /// Examples: "lines", "markers", "lines+markers", "lines+markers+text", "none"
@@ -38,6 +28,15 @@ class ScatterTrace {
   /// Otherwise, "lines".
   String? mode;
 
+  /// A list with only one element means that the value applies to all
+  /// elements of the trace.
+  List<String>? text;
+
+  TraceVisibility visible = TraceVisibility.on;
+
+  /// The opacity of this trace.
+  num opacity = 1;
+
   /// Assigns id labels to each datum. These ids for object constancy of data
   /// points during animation. Should be an array of strings, not numbers or
   /// any other type.
@@ -46,6 +45,12 @@ class ScatterTrace {
   /// Determines whether or not an item corresponding to this trace is shown in
   /// the legend.
   bool showLegend = true;
+
+  String legend = 'legend';
+  int legendRank = 1000;
+  String legendGroup = '';
+  LegendGroupTitle? legendGroupTitle;
+  num? legendWidth;
 
   /// Alternate to `x`. Builds a linear space of x coordinates. Use with `dx`
   /// where `x0` is the starting coordinate and `dx` the step.
@@ -60,10 +65,6 @@ class ScatterTrace {
 
   /// Sets the y coordinate step. See `y0` for more info.
   num dy = 1;
-
-  /// A list with only one element means that the value applies to all
-  /// elements of the trace.
-  List<String>? text;
 
   /// Sets the positions of the `text` elements with respects to the (x,y)
   /// coordinates.

@@ -17,7 +17,22 @@ class Chart extends StatefulWidget {
 
 class _ChartState extends State<Chart> {
   final GlobalKey _chartKey = GlobalKey();
+
+  /// A list of booleans to track the visibility of each trace, initialized to
+  /// true.  It is used by the legend to toggle visibility and by [makeData] to
+  /// determine which data points to include.
   late List<bool> traceVisible;
+
+  /// The full dataset constructed from the input [traces], stored as a list of
+  /// maps (in the format package `graphic` wants.)
+  ///
+  /// Each map represents a data point with keys like 'x', 'y', and 'name'.
+  /// This is generated in the build method by [makeData] and used for rendering
+  /// the chart and handling selections.
+  ///
+  /// This is stored as a state variable because it is needed in the gesture
+  /// handling logic to filter data points based on user interactions
+  /// (like drag selection).
   late List<Map<String, dynamic>> data;
 
   final StreamController<g.GestureEvent> _gestureController =
@@ -33,8 +48,7 @@ class _ChartState extends State<Chart> {
     traceVisible = List.filled(widget.traces.length, true);
     _gestureSub = _gestureController.stream.listen((event) {
       try {
-        final ge = event as g.GestureEvent;
-        final geg = ge.gesture;
+        final geg = event.gesture;
 
         if (geg.type == g.GestureType.scaleStart) {
           final details = geg.details as ScaleStartDetails;
@@ -129,6 +143,9 @@ class _ChartState extends State<Chart> {
     super.dispose();
   }
 
+  /// Use the input [traces] to construct the data in the format that package
+  /// `graphic` expects.
+  ///
   List<Map<String, dynamic>> makeData(List<ScatterTrace> traces) {
     final data = <Map<String, dynamic>>[];
     for (var i = 0; i < traces.length; i++) {
@@ -145,6 +162,8 @@ class _ChartState extends State<Chart> {
     return data;
   }
 
+  /// Variables for the chart as needed by package `graphic`.
+  ///
   Map<String, g.Variable<Map<dynamic, dynamic>, dynamic>> makeVariables(
     List<Map<String, dynamic>> data,
   ) {
@@ -163,13 +182,17 @@ class _ChartState extends State<Chart> {
         position: g.Varset('x') * g.Varset('y') / g.Varset('name'),
         color: g.ColorEncode(
           encoder: (e) {
-            if (e['name'] == 'trace 1') {
-              return Defaults.colors[1];
-            } else if (e['name'] == 'trace 2') {
-              return Defaults.colors[2];
-            } else {
-              return Colors.transparent;
+            for (var i = 0; i < traces.length; i++) {
+              if (!traceVisible[i]) continue;
+              final trace = traces[i];
+              if ((trace.name ?? 'trace $i') == e['name'] &&
+                  trace.mode != null) {
+                if (trace.mode!.contains('lines')) {
+                  return Defaults.colors[i];
+                }
+              }
             }
+            return Colors.transparent;
           },
         ),
       ),
@@ -177,11 +200,17 @@ class _ChartState extends State<Chart> {
         color: g.ColorEncode(variable: 'name', values: Defaults.colors),
         size: g.SizeEncode(
           encoder: (e) {
-            if (e['name'] == 'trace 0' || e['name'] == 'trace 2') {
-              return 6.0;
-            } else {
-              return 0.0;
+            for (var i = 0; i < traces.length; i++) {
+              if (!traceVisible[i]) continue;
+              final trace = traces[i];
+              if ((trace.name ?? 'trace $i') == e['name'] &&
+                  trace.mode != null) {
+                if (trace.mode!.contains('markers')) {
+                  return 6.0;
+                }
+              }
             }
+            return 0.0;
           },
         ),
       ),
@@ -248,11 +277,12 @@ class _ChartState extends State<Chart> {
                         align: Alignment.topLeft,
                         offset: const Offset(-20, -20),
                       ),
-                      crosshair: g.CrosshairGuide(
-                        followPointer: [false, false],
-                      ),
+                      // crosshair: g.CrosshairGuide(
+                      //   followPointer: [false, false],
+                      // ),
                       gestureStream: _gestureController,
                     ),
+                    // if there is a selection
                     if (_currentSelectionNormalized != null)
                       Positioned(
                         left:
@@ -288,45 +318,48 @@ class _ChartState extends State<Chart> {
         final mode = widget.traces[i].mode ?? '';
         final isVisible = traceVisible[i];
         final color = isVisible ? Defaults.colors[i] : Colors.grey.shade400;
-        return GestureDetector(
-          onTap: () => setState(() => traceVisible[i] = !traceVisible[i]),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 3.0),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  width: 40,
-                  height: 14,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      if (mode.contains('lines'))
-                        Container(height: 2, color: color),
-                      if (mode.contains('markers'))
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: color,
-                            shape: BoxShape.circle,
+        return MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            onTap: () => setState(() => traceVisible[i] = !traceVisible[i]),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3.0),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 40,
+                    height: 14,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        if (mode.contains('lines'))
+                          Container(height: 2, color: color),
+                        if (mode.contains('markers'))
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: color,
+                              shape: BoxShape.circle,
+                            ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isVisible ? Colors.black : Colors.grey,
+                  const SizedBox(width: 6),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isVisible ? Colors.black : Colors.grey,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        );
+        ); // MouseRegion
       }),
     );
   }
