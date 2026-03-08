@@ -2,3 +2,4 @@
 # 2026-03-07
 - Chart with default legend and zooming.  Zooming still looks to miss data right 
 at the edge.
+- Legend now correctly displays traces when on/off clicked. 

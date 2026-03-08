@@ -18,11 +18,6 @@ class Chart extends StatefulWidget {
 class _ChartState extends State<Chart> {
   final GlobalKey _chartKey = GlobalKey();
 
-  /// A list of booleans to track the visibility of each trace, initialized to
-  /// true.  It is used by the legend to toggle visibility and by [makeData] to
-  /// determine which data points to include.
-  late List<bool> traceVisible;
-
   /// The full dataset constructed from the input [traces], stored as a list of
   /// maps (in the format package `graphic` wants.)
   ///
@@ -45,7 +40,6 @@ class _ChartState extends State<Chart> {
   @override
   void initState() {
     super.initState();
-    traceVisible = List.filled(widget.traces.length, true);
     _gestureSub = _gestureController.stream.listen((event) {
       try {
         final geg = event.gesture;
@@ -149,8 +143,8 @@ class _ChartState extends State<Chart> {
   List<Map<String, dynamic>> makeData(List<ScatterTrace> traces) {
     final data = <Map<String, dynamic>>[];
     for (var i = 0; i < traces.length; i++) {
-      if (!traceVisible[i]) continue;
       final trace = traces[i];
+      if (trace.visible == TraceVisibility.off) continue;
       for (var j = 0; j < trace.x.length; j++) {
         data.add({
           'x': trace.x[j],
@@ -183,8 +177,8 @@ class _ChartState extends State<Chart> {
         color: g.ColorEncode(
           encoder: (e) {
             for (var i = 0; i < traces.length; i++) {
-              if (!traceVisible[i]) continue;
               final trace = traces[i];
+              if (trace.visible == TraceVisibility.off) continue;
               if ((trace.name ?? 'trace $i') == e['name'] &&
                   trace.mode != null) {
                 if (trace.mode!.contains('lines')) {
@@ -197,12 +191,26 @@ class _ChartState extends State<Chart> {
         ),
       ),
       g.PointMark(
-        color: g.ColorEncode(variable: 'name', values: Defaults.colors),
+        color: g.ColorEncode(
+          encoder: (e) {
+            for (var i = 0; i < traces.length; i++) {
+              final trace = traces[i];
+              if (trace.visible == TraceVisibility.off) continue;
+              if ((trace.name ?? 'trace $i') == e['name'] &&
+                  trace.mode != null) {
+                if (trace.mode!.contains('markers')) {
+                  return Defaults.colors[i];
+                }
+              }
+            }
+            return Colors.transparent;
+          },
+        ),
         size: g.SizeEncode(
           encoder: (e) {
             for (var i = 0; i < traces.length; i++) {
-              if (!traceVisible[i]) continue;
               final trace = traces[i];
+              if (trace.visible == TraceVisibility.off) continue;
               if ((trace.name ?? 'trace $i') == e['name'] &&
                   trace.mode != null) {
                 if (trace.mode!.contains('markers')) {
@@ -221,7 +229,9 @@ class _ChartState extends State<Chart> {
   Widget build(BuildContext context) {
     data = makeData(widget.traces);
     final variables = makeVariables(data);
-    final marks = makeMarks(widget.traces);
+    final visibilityKey = widget.traces
+        .map((t) => t.visible.toString())
+        .join('-');
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -236,10 +246,11 @@ class _ChartState extends State<Chart> {
                 child: Stack(
                   children: [
                     g.Chart(
+                      key: ValueKey(visibilityKey),
                       padding: (_) => const EdgeInsets.fromLTRB(40, 5, 80, 40),
                       data: _filteredData.isNotEmpty ? _filteredData : data,
                       variables: variables,
-                      marks: marks,
+                      marks: makeMarks(widget.traces),
                       coord: g.RectCoord(
                         horizontalRange: [0, 1],
                         verticalRange: [0, 1],
@@ -316,12 +327,16 @@ class _ChartState extends State<Chart> {
       children: List.generate(widget.traces.length, (i) {
         final label = widget.traces[i].name ?? 'trace $i';
         final mode = widget.traces[i].mode ?? '';
-        final isVisible = traceVisible[i];
+        final isVisible = widget.traces[i].visible == TraceVisibility.on;
         final color = isVisible ? Defaults.colors[i] : Colors.grey.shade400;
         return MouseRegion(
           cursor: SystemMouseCursors.click,
           child: GestureDetector(
-            onTap: () => setState(() => traceVisible[i] = !traceVisible[i]),
+            onTap: () => setState(() {
+              widget.traces[i].visible = isVisible
+                  ? TraceVisibility.off
+                  : TraceVisibility.on;
+            }),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 3.0),
               child: Row(
