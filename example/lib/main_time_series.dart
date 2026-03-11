@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:gallery/assets/caiso_prices.dart';
 import 'package:graphic_lite/graphic_lite.dart';
+import 'package:timezone/data/latest.dart';
+import 'package:timezone/timezone.dart';
 
 void main() {
+  initializeTimeZones();
   runApp(const MyApp());
 }
 
@@ -11,9 +15,9 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Basic Scatter Plot',
+      title: 'Time Series Plot',
       theme: ThemeData(colorScheme: .fromSeed(seedColor: Colors.deepPurple)),
-      home: const MyHomePage(title: 'Basic Scatter Plot'),
+      home: const MyHomePage(title: 'Time Series Plot'),
     );
   }
 }
@@ -27,11 +31,20 @@ class MyHomePage extends StatefulWidget {
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
+final tz = getLocation('America/Los_Angeles');
+
 class _MyHomePageState extends State<MyHomePage> {
   final traces = [
-    ScatterTrace(x: [1, 2, 3, 4], y: [10, 15, 13, 17], mode: 'markers'),
-    ScatterTrace(x: [2, 3, 4, 5], y: [16, 5, 11, 9], mode: 'lines'),
-    ScatterTrace(x: [1, 2, 3, 4], y: [12, 9, 15, 12], mode: 'lines+markers'),
+    ScatterTrace<TZDateTime>(
+      x: prices[0]['x']!.map<TZDateTime>((e) => TZDateTime.parse(tz, e)).toList(),
+      y: (prices[0]['y']! as List).cast<num>(),
+      name: 'NP15', //prices[0]['name']!,
+    ),
+    ScatterTrace<TZDateTime>(
+      x: prices[1]['x']!.map<TZDateTime>((e) => TZDateTime.parse(tz, e)).toList(),
+      y: (prices[1]['y']! as List).cast<num>(),
+      name: 'SP15', //prices[1]['name']!,
+    ),
   ];
 
   @override

@@ -36,6 +36,7 @@ class _ChartState extends State<Chart> {
   Offset? _dragStart;
   List<Map<String, dynamic>> _filteredData = [];
   List<double>? _currentSelectionNormalized;
+  late (num, num) _domainX;
 
   @override
   void initState() {
@@ -86,6 +87,7 @@ class _ChartState extends State<Chart> {
 
           // gesture.localPosition is already local to the chart
           final localEnd = geg.localPosition;
+          print('Drag ended at local position: $localEnd');
 
           // Adjust these paddings to match your chart layout if needed.
           const leftPad = 40.0;
@@ -99,19 +101,28 @@ class _ChartState extends State<Chart> {
               : localStart.dx;
           final width = chartBox.size.width - leftPad - rightPad;
           if (width <= 0) return;
+          print('Chart width for selection: $width');
+          print('Raw selection range in local coordinates: [$left, $right]');
 
           double nx0 = ((left - leftPad) / width).clamp(0.0, 1.0);
           double nx1 = ((right - leftPad) / width).clamp(0.0, 1.0);
           if (nx1 <= nx0) return;
 
-          final firstMs = 1.0;
-          final lastMs = 5.0;
+          final firstMs = _domainX.$1;
+          final lastMs = _domainX.$2;
+          print('Selected normalized range: [$nx0, $nx1]');
+          print('Domain X: [${_domainX.$1}, ${_domainX.$2}]');
+
           final selMin = firstMs + nx0 * (lastMs - firstMs);
           final selMax = firstMs + nx1 * (lastMs - firstMs);
+          print('Selected domain range: [$selMin, $selMax]');
 
           setState(() {
             _filteredData = data.where((e) {
-              return e['x'] >= selMin && e['x'] <= selMax;
+              final xNum = _xIsDateTime
+                  ? (e['x'] as DateTime).microsecondsSinceEpoch.toDouble()
+                  : (e['x'] as num).toDouble();
+              return xNum >= selMin && xNum <= selMax;
             }).toList();
             // clear live selection overlay once selection is committed
             _currentSelectionNormalized = null;
@@ -140,12 +151,27 @@ class _ChartState extends State<Chart> {
   /// Use the input [traces] to construct the data in the format that package
   /// `graphic` expects.
   ///
+  /// Whether the x-axis uses DateTime values (affects domain/filter logic).
+  bool _xIsDateTime = false;
+
   List<Map<String, dynamic>> makeData(List<ScatterTrace> traces) {
+    var minNum = double.infinity;
+    var maxNum = double.negativeInfinity;
+    DateTime? minDt;
+    DateTime? maxDt;
     final data = <Map<String, dynamic>>[];
     for (var i = 0; i < traces.length; i++) {
       final trace = traces[i];
       if (trace.visible == TraceVisibility.off) continue;
       for (var j = 0; j < trace.x.length; j++) {
+        final xVal = trace.x[j];
+        if (xVal is DateTime) {
+          if (minDt == null || xVal.isBefore(minDt)) minDt = xVal;
+          if (maxDt == null || xVal.isAfter(maxDt)) maxDt = xVal;
+        } else if (xVal is num) {
+          if (xVal < minNum) minNum = xVal.toDouble();
+          if (xVal > maxNum) maxNum = xVal.toDouble();
+        }
         data.add({
           'x': trace.x[j],
           'y': trace.y[j],
@@ -153,22 +179,70 @@ class _ChartState extends State<Chart> {
         });
       }
     }
+    // Match graphic's 10% margin on each side of the data range — the same
+    // formula used by LinearScale and TimeScale internally.
+    if (minDt != null && maxDt != null) {
+      _xIsDateTime = true;
+      final minMicro = minDt.microsecondsSinceEpoch.toDouble();
+      final maxMicro = maxDt.microsecondsSinceEpoch.toDouble();
+      final range = maxMicro == minMicro ? 1e6 : maxMicro - minMicro;
+      _domainX = (minMicro - 0.1 * range, maxMicro + 0.1 * range);
+    } else {
+      _xIsDateTime = false;
+      final range = maxNum == minNum ? 10 : maxNum - minNum;
+      _domainX = (minNum - 0.1 * range, maxNum + 0.1 * range);
+    }
     return data;
   }
+
+  final variableXInt = g.Variable(accessor: (Map map) => map['x'] as int);
+  final variableXNum = g.Variable(accessor: (Map map) => map['x'] as num);
+  final variableXDateTime = g.Variable(
+    accessor: (Map map) => map['x'] as DateTime,
+  );
+  final variableXString = g.Variable(accessor: (Map map) => map['x'] as String);
+  final variableYNum = g.Variable(accessor: (Map map) => map['y'] as num);
 
   /// Variables for the chart as needed by package `graphic`.
   ///
   Map<String, g.Variable<Map<dynamic, dynamic>, dynamic>> makeVariables(
     List<Map<String, dynamic>> data,
+    List<ScatterTrace> traces,
   ) {
-    return <String, g.Variable<Map<dynamic, dynamic>, dynamic>>{
-      'x': g.Variable(accessor: (Map map) => map['x'] as int),
-      'y': g.Variable(accessor: (Map map) => map['y'] as int),
-      'name': g.Variable(accessor: (Map map) => map['name'] as String),
-    };
+    switch (traces.first.x.first) {
+      case int _:
+        return {
+          'x': variableXInt,
+          'y': variableYNum,
+          'name': g.Variable(accessor: (Map map) => map['name'] as String),
+        };
+      case num _:
+        return {
+          'x': variableXNum,
+          'y': variableYNum,
+          'name': g.Variable(accessor: (Map map) => map['name'] as String),
+        };
+      case DateTime _:
+        return {
+          'x': variableXDateTime,
+          'y': variableYNum,
+          'name': g.Variable(accessor: (Map map) => map['name'] as String),
+        };
+      case String _:
+        return {
+          'x': variableXString,
+          'y': variableYNum,
+          'name': g.Variable(accessor: (Map map) => map['name'] as String),
+        };
+      default:
+        throw Exception(
+          'Unsupported x value type: ${traces.first.x.first.runtimeType}',
+        );
+    }
   }
 
   /// Check the mode of each trace and return the appropriate marks.
+  /// The `mode` can be null.
   ///
   List<g.Mark<g.Shape>> makeMarks(List<ScatterTrace> traces) {
     return [
@@ -179,9 +253,9 @@ class _ChartState extends State<Chart> {
             for (var i = 0; i < traces.length; i++) {
               final trace = traces[i];
               if (trace.visible == TraceVisibility.off) continue;
-              if ((trace.name ?? 'trace $i') == e['name'] &&
-                  trace.mode != null) {
-                if (trace.mode!.contains('lines')) {
+              if ((trace.name ?? 'trace $i') == e['name']) {
+                final mode = trace.mode ?? trace.defaultMode;
+                if (mode.contains('lines')) {
                   return Defaults.colors[i];
                 }
               }
@@ -196,9 +270,9 @@ class _ChartState extends State<Chart> {
             for (var i = 0; i < traces.length; i++) {
               final trace = traces[i];
               if (trace.visible == TraceVisibility.off) continue;
-              if ((trace.name ?? 'trace $i') == e['name'] &&
-                  trace.mode != null) {
-                if (trace.mode!.contains('markers')) {
+              if ((trace.name ?? 'trace $i') == e['name']) {
+                final mode = trace.mode ?? trace.defaultMode;
+                if (mode.contains('markers')) {
                   return Defaults.colors[i];
                 }
               }
@@ -228,7 +302,7 @@ class _ChartState extends State<Chart> {
   @override
   Widget build(BuildContext context) {
     data = makeData(widget.traces);
-    final variables = makeVariables(data);
+    final variables = makeVariables(data, widget.traces);
     final visibilityKey = widget.traces
         .map((t) => t.visible.toString())
         .join('-');
@@ -247,7 +321,7 @@ class _ChartState extends State<Chart> {
                   children: [
                     g.Chart(
                       key: ValueKey(visibilityKey),
-                      padding: (_) => const EdgeInsets.fromLTRB(40, 5, 80, 40),
+                      padding: (_) => const EdgeInsets.fromLTRB(40, 5, 10, 40),
                       data: _filteredData.isNotEmpty ? _filteredData : data,
                       variables: variables,
                       marks: makeMarks(widget.traces),
@@ -288,9 +362,6 @@ class _ChartState extends State<Chart> {
                         align: Alignment.topLeft,
                         offset: const Offset(-20, -20),
                       ),
-                      // crosshair: g.CrosshairGuide(
-                      //   followPointer: [false, false],
-                      // ),
                       gestureStream: _gestureController,
                     ),
                     // if there is a selection
@@ -325,15 +396,16 @@ class _ChartState extends State<Chart> {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: List.generate(widget.traces.length, (i) {
-        final label = widget.traces[i].name ?? 'trace $i';
-        final mode = widget.traces[i].mode ?? '';
-        final isVisible = widget.traces[i].visible == TraceVisibility.on;
+        final trace = widget.traces[i];
+        final label = trace.name ?? 'trace $i';
+        final mode = trace.mode ?? trace.defaultMode;
+        final isVisible = trace.visible == TraceVisibility.on;
         final color = isVisible ? Defaults.colors[i] : Colors.grey.shade400;
         return MouseRegion(
           cursor: SystemMouseCursors.click,
           child: GestureDetector(
             onTap: () => setState(() {
-              widget.traces[i].visible = isVisible
+              trace.visible = isVisible
                   ? TraceVisibility.off
                   : TraceVisibility.on;
             }),

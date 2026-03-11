@@ -3,7 +3,7 @@ import 'layout.dart';
 import 'legend.dart';
 import 'text_position.dart';
 
-class ScatterTrace {
+class ScatterTrace<D> {
   /// See https://plotly.com/javascript/reference/scatter/
   ScatterTrace({
     required this.x,
@@ -14,19 +14,24 @@ class ScatterTrace {
   }) {
     assert(x.length == y.length);
   }
-  List<dynamic> x;
+  List<D> x;
   List<num> y;
 
   String? name;
 
-  /// Any combination of "lines", "markers", "text" joined with a "+" OR "none".
-  /// Examples: "lines", "markers", "lines+markers", "lines+markers+text", "none"
+  /// Any combination of "lines", "markers", "text" joined with a "+".
+  /// Examples: "lines", "markers", "lines+markers", "lines+markers+text".
   /// Determines the drawing mode for this scatter trace. If the provided `mode`
   /// includes "text" then the `text` elements appear at the coordinates.
-  /// Otherwise, the `text` elements appear on hover.  If there are less than
-  /// 20 points and the trace is not stacked then the default is "lines+markers".
-  /// Otherwise, "lines".
+  /// Otherwise, the `text` elements appear on hover.  
   String? mode;
+
+  /// If there are less than 20 points and the trace is not stacked then the 
+  /// default is "lines+markers".  Otherwise, "lines".
+  String get defaultMode {
+    if (y.length < 20) return 'lines+markers';
+    return 'lines';
+  }
 
   /// A list with only one element means that the value applies to all
   /// elements of the trace.
@@ -245,141 +250,141 @@ class ScatterTrace {
   /// i.e. 2000-01-02, otherwise it would be at 2000-01-01.
   Object? yPeriod0;
 
-  static ScatterTrace fromJson(Map<String, dynamic> x) {
-    late ScatterTrace trace;
-    if (x case {'x': List _x, 'y': List<num> _y, 'type': 'scatter'}) {
-      trace = ScatterTrace(x: _x, y: _y);
-      if (x.containsKey('name')) trace.name = x['name'];
-      if (x.containsKey('visible')) trace.visible = x['visible'];
-      if (x.containsKey('showlegend')) trace.showLegend = x['showlegend'];
-      if (x.containsKey('legend')) trace.legend = x['showlegend'];
-      if (x.containsKey('legendgrouptitle')) {
-        trace.legendGroupTitle = LegendGroupTitle.fromJson(
-          x['legendgrouptitle'],
-        );
-      }
-      if (x.containsKey('legendwidth')) {
-        trace.legendWidth = x['legendwidth'];
-        assert(trace.legendWidth! > 0);
-      }
-      if (x.containsKey('opacity')) trace.opacity = x['opacity'];
-      if (x.containsKey('mode')) {
-        if (!isValidMode(x['mode'])) {
-          throw ArgumentError('Invalid scatter trace mode ${x['mode']}');
-        }
-        trace.mode = x['mode'];
-      }
-      if (x.containsKey('ids')) trace.ids = x['ids'];
-      if (x.containsKey('x0')) trace.x0 = x['x0'];
-      if (x.containsKey('dx')) trace.dx = x['dx'];
-      if (x.containsKey('y0')) trace.x0 = x['y0'];
-      if (x.containsKey('dy')) trace.dx = x['dy'];
-      if (x.containsKey('text')) {
-        if (x['text'] is String) {
-          trace.text = [x['text']];
-        } else if (x['text'] is List) {
-          trace.text = x['text'];
-          assert(trace.x.length == trace.text!.length);
-        } else {
-          throw ArgumentError(
-            'The input for the field "text" can only be a String or a List<String>.',
-          );
-        }
-      }
-      if (x.containsKey('textposition')) {
-        if (x['textposition'] is String) {
-          trace.textPosition = [TextPosition.parse(x['text'])];
-        } else if (x['textposition'] is List) {
-          trace.textPosition = (x['textposition'] as List)
-              .map((e) => TextPosition.parse(e))
-              .toList();
-          assert(trace.x.length == trace.textPosition!.length);
-        } else {
-          throw ArgumentError(
-            'The input for the field "textposition" can only be a String or a List<String>.',
-          );
-        }
-      }
-      if (x.containsKey('texttemplate')) {
-        if (x['texttemplate'] is String) {
-          trace.textTemplate = [x['texttemplate']];
-        } else if (x['texttemplate'] is List) {
-          trace.textTemplate = x['texttemplate'];
-          assert(trace.x.length == trace.textTemplate!.length);
-        } else {
-          throw ArgumentError(
-            'The input for the field "texttemplate" can only be a String or a List<String>.',
-          );
-        }
-      }
-      if (x.containsKey('hovertext')) {
-        if (x['hovertext'] is String) {
-          trace.hoverText = [x['hovertext']];
-        } else if (x['hovertext'] is List) {
-          trace.hoverText = x['hovertext'];
-          assert(trace.x.length == trace.hoverText!.length);
-        } else {
-          throw ArgumentError(
-            'The input for the field "hovertext" can only be a String or a List<String>.',
-          );
-        }
-      }
-      if (x.containsKey('hoverinfo')) {
-        if (!isValidHoverInfo(x['hoverinfo'])) {
-          throw ArgumentError('Invalid hoverinfo ${x['mode']}');
-        }
-        trace.hoverInfo = x['hoverinfo'];
-      }
-      if (x.containsKey('hovertemplate')) {
-        if (x['hovertemplate'] is String) {
-          trace.hoverTemplate = [x['hovertemplate']];
-        } else if (x['hovertemplate'] is List) {
-          trace.hoverTemplate = x['hovertemplate'];
-          assert(trace.x.length == trace.hoverTemplate!.length);
-        } else {
-          throw ArgumentError(
-            'The input for the field "hovertemplate" can only be a String or a List<String>.',
-          );
-        }
-      }
-      if (x.containsKey('xhoverformat')) trace.xHoverFormat = x['xhoverformat'];
-      if (x.containsKey('yhoverformat')) trace.yHoverFormat = x['yhoverformat'];
-      if (x.containsKey('meta')) trace.meta = x['meta'];
-      if (x.containsKey('customdata')) {
-        trace.customData = x['customdata'];
-        assert(trace.x.length == trace.customData!.length);
-      }
-      if (x.containsKey('xaxis')) trace.xAxis = x['xaxis'];
-      if (x.containsKey('yaxis')) trace.yAxis = x['yaxis'];
-      if (x.containsKey('orientation')) {
-        trace.orientation = Orientation.parse(x['orientation']);
-      }
-      if (x.containsKey('groupnorm')) {
-        trace.groupNorm = GroupNorm.parse(x['groupnorm']);
-      }
-      if (x.containsKey('alignmentgroup')) {
-        trace.alignmentGroup = x['alignmentgroup'];
-      }
-      if (x.containsKey('offsetgroup')) trace.offsetGroup = x['offsetgroup'];
-      if (x.containsKey('stackgroup')) trace.stackGroup = x['stackgroup'];
-      if (x.containsKey('xperiod')) trace.xPeriod = x['xperiod'];
-      if (x.containsKey('xperiod0')) trace.xPeriod0 = x['xperiod0'];
-      if (x.containsKey('xperiodalignment')) {
-        trace.xPeriodAlignment = x['xperiodalignment'];
-      }
-      if (x.containsKey('yperiod')) trace.yPeriod = x['yperiod'];
-      if (x.containsKey('yperiod0')) trace.yPeriod0 = x['yperiod0'];
-      if (x.containsKey('yperiodalignment')) {
-        trace.yPeriodAlignment = x['yperiodalignment'];
-      }
-    } else {
-      throw ArgumentError(
-        'Input $x is not a correctly formatted Polygraph project',
-      );
-    }
+  // static ScatterTrace fromJson(Map<String, dynamic> x) {
+  //   late ScatterTrace trace;
+  //   if (x case {'x': List _x, 'y': List<num> _y, 'type': 'scatter'}) {
+  //     trace = ScatterTrace(x: _x, y: _y);
+  //     if (x.containsKey('name')) trace.name = x['name'];
+  //     if (x.containsKey('visible')) trace.visible = x['visible'];
+  //     if (x.containsKey('showlegend')) trace.showLegend = x['showlegend'];
+  //     if (x.containsKey('legend')) trace.legend = x['showlegend'];
+  //     if (x.containsKey('legendgrouptitle')) {
+  //       trace.legendGroupTitle = LegendGroupTitle.fromJson(
+  //         x['legendgrouptitle'],
+  //       );
+  //     }
+  //     if (x.containsKey('legendwidth')) {
+  //       trace.legendWidth = x['legendwidth'];
+  //       assert(trace.legendWidth! > 0);
+  //     }
+  //     if (x.containsKey('opacity')) trace.opacity = x['opacity'];
+  //     if (x.containsKey('mode')) {
+  //       if (!isValidMode(x['mode'])) {
+  //         throw ArgumentError('Invalid scatter trace mode ${x['mode']}');
+  //       }
+  //       trace.mode = x['mode'];
+  //     }
+  //     if (x.containsKey('ids')) trace.ids = x['ids'];
+  //     if (x.containsKey('x0')) trace.x0 = x['x0'];
+  //     if (x.containsKey('dx')) trace.dx = x['dx'];
+  //     if (x.containsKey('y0')) trace.x0 = x['y0'];
+  //     if (x.containsKey('dy')) trace.dx = x['dy'];
+  //     if (x.containsKey('text')) {
+  //       if (x['text'] is String) {
+  //         trace.text = [x['text']];
+  //       } else if (x['text'] is List) {
+  //         trace.text = x['text'];
+  //         assert(trace.x.length == trace.text!.length);
+  //       } else {
+  //         throw ArgumentError(
+  //           'The input for the field "text" can only be a String or a List<String>.',
+  //         );
+  //       }
+  //     }
+  //     if (x.containsKey('textposition')) {
+  //       if (x['textposition'] is String) {
+  //         trace.textPosition = [TextPosition.parse(x['text'])];
+  //       } else if (x['textposition'] is List) {
+  //         trace.textPosition = (x['textposition'] as List)
+  //             .map((e) => TextPosition.parse(e))
+  //             .toList();
+  //         assert(trace.x.length == trace.textPosition!.length);
+  //       } else {
+  //         throw ArgumentError(
+  //           'The input for the field "textposition" can only be a String or a List<String>.',
+  //         );
+  //       }
+  //     }
+  //     if (x.containsKey('texttemplate')) {
+  //       if (x['texttemplate'] is String) {
+  //         trace.textTemplate = [x['texttemplate']];
+  //       } else if (x['texttemplate'] is List) {
+  //         trace.textTemplate = x['texttemplate'];
+  //         assert(trace.x.length == trace.textTemplate!.length);
+  //       } else {
+  //         throw ArgumentError(
+  //           'The input for the field "texttemplate" can only be a String or a List<String>.',
+  //         );
+  //       }
+  //     }
+  //     if (x.containsKey('hovertext')) {
+  //       if (x['hovertext'] is String) {
+  //         trace.hoverText = [x['hovertext']];
+  //       } else if (x['hovertext'] is List) {
+  //         trace.hoverText = x['hovertext'];
+  //         assert(trace.x.length == trace.hoverText!.length);
+  //       } else {
+  //         throw ArgumentError(
+  //           'The input for the field "hovertext" can only be a String or a List<String>.',
+  //         );
+  //       }
+  //     }
+  //     if (x.containsKey('hoverinfo')) {
+  //       if (!isValidHoverInfo(x['hoverinfo'])) {
+  //         throw ArgumentError('Invalid hoverinfo ${x['mode']}');
+  //       }
+  //       trace.hoverInfo = x['hoverinfo'];
+  //     }
+  //     if (x.containsKey('hovertemplate')) {
+  //       if (x['hovertemplate'] is String) {
+  //         trace.hoverTemplate = [x['hovertemplate']];
+  //       } else if (x['hovertemplate'] is List) {
+  //         trace.hoverTemplate = x['hovertemplate'];
+  //         assert(trace.x.length == trace.hoverTemplate!.length);
+  //       } else {
+  //         throw ArgumentError(
+  //           'The input for the field "hovertemplate" can only be a String or a List<String>.',
+  //         );
+  //       }
+  //     }
+  //     if (x.containsKey('xhoverformat')) trace.xHoverFormat = x['xhoverformat'];
+  //     if (x.containsKey('yhoverformat')) trace.yHoverFormat = x['yhoverformat'];
+  //     if (x.containsKey('meta')) trace.meta = x['meta'];
+  //     if (x.containsKey('customdata')) {
+  //       trace.customData = x['customdata'];
+  //       assert(trace.x.length == trace.customData!.length);
+  //     }
+  //     if (x.containsKey('xaxis')) trace.xAxis = x['xaxis'];
+  //     if (x.containsKey('yaxis')) trace.yAxis = x['yaxis'];
+  //     if (x.containsKey('orientation')) {
+  //       trace.orientation = Orientation.parse(x['orientation']);
+  //     }
+  //     if (x.containsKey('groupnorm')) {
+  //       trace.groupNorm = GroupNorm.parse(x['groupnorm']);
+  //     }
+  //     if (x.containsKey('alignmentgroup')) {
+  //       trace.alignmentGroup = x['alignmentgroup'];
+  //     }
+  //     if (x.containsKey('offsetgroup')) trace.offsetGroup = x['offsetgroup'];
+  //     if (x.containsKey('stackgroup')) trace.stackGroup = x['stackgroup'];
+  //     if (x.containsKey('xperiod')) trace.xPeriod = x['xperiod'];
+  //     if (x.containsKey('xperiod0')) trace.xPeriod0 = x['xperiod0'];
+  //     if (x.containsKey('xperiodalignment')) {
+  //       trace.xPeriodAlignment = x['xperiodalignment'];
+  //     }
+  //     if (x.containsKey('yperiod')) trace.yPeriod = x['yperiod'];
+  //     if (x.containsKey('yperiod0')) trace.yPeriod0 = x['yperiod0'];
+  //     if (x.containsKey('yperiodalignment')) {
+  //       trace.yPeriodAlignment = x['yperiodalignment'];
+  //     }
+  //   } else {
+  //     throw ArgumentError(
+  //       'Input $x is not a correctly formatted Polygraph project',
+  //     );
+  //   }
 
-    return trace;
-  }
+  //   return trace;
+  // }
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
