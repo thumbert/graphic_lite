@@ -11,7 +11,10 @@ dependencies:
   flutter:
     sdk: flutter
 
+  date: 
+    git: https://github.com/thumbert/date.git
   graphic: ^2.7.0
+  timezone: ^0.11.0
 
 
 dev_dependencies:
