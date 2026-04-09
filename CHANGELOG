@@ -1,4 +1,9 @@
 
+
+# 2026-04-08
+- Add tooltip follow mouse.  Position tooltip to the right of the data point.
+  Color the tooltip with the color of the marker for better visual association.
+
 # 2026-03-07
 - Chart with default legend and zooming.  Zooming still looks to miss data right 
 at the edge.

@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/painting.dart';
 import 'package:graphic_lite/graphic_lite.dart';
 import 'package:graphic/graphic.dart' as g;
 
@@ -241,6 +243,69 @@ class _ChartState extends State<Chart> {
     }
   }
 
+  /// Custom tooltip renderer that colors the tooltip text to match the
+  /// corresponding trace color.
+  List<g.MarkElement> _tooltipRenderer(
+    Size size,
+    Offset anchor,
+    Map<int, g.Tuple> selectedTuples,
+  ) {
+    if (selectedTuples.isEmpty) return [];
+
+    final tuple = selectedTuples.values.first;
+    final name = tuple['name'] as String;
+
+    Color traceColor = const Color(0xff595959);
+    for (var i = 0; i < widget.traces.length; i++) {
+      final trace = widget.traces[i];
+      if ((trace.name ?? 'trace $i') == name) {
+        traceColor = Defaults.colors[i];
+        break;
+      }
+    }
+
+    final xVal = tuple['x'];
+    final yVal = tuple['y'];
+    final xStr = xVal is DateTime ? xVal.toIso8601String() : xVal.toString();
+    final text = '($xStr, $yVal) $name';
+
+    final textStyle = TextStyle(color: traceColor, fontSize: 12);
+    const padding = EdgeInsets.all(5.0);
+
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: textStyle),
+      textDirection: TextDirection.ltr,
+    );
+    painter.layout();
+
+    final w = padding.left + painter.width + padding.right;
+    final h = padding.top + painter.height + padding.bottom;
+
+    // Position tooltip just right of the anchor point, vertically centered.
+    var rect = Rect.fromLTWH(anchor.dx + 10, anchor.dy - h / 2, w, h);
+    final hAdj = rect.left < 0
+        ? -rect.left
+        : (rect.right > size.width ? size.width - rect.right : 0.0);
+    final vAdj = rect.top < 0
+        ? -rect.top
+        : (rect.bottom > size.height ? size.height - rect.bottom : 0.0);
+    rect = rect.translate(hAdj, vAdj);
+    final textPaintPoint = rect.topLeft + padding.topLeft;
+
+    return [
+      g.RectElement(
+        rect: rect,
+        borderRadius: const BorderRadius.all(Radius.circular(3)),
+        style: g.PaintStyle(fillColor: const Color(0xf0ffffff), elevation: 3),
+      ),
+      g.LabelElement(
+        text: text,
+        anchor: textPaintPoint,
+        style: g.LabelStyle(textStyle: textStyle, align: Alignment.bottomRight),
+      ),
+    ];
+  }
+
   /// Check the mode of each trace and return the appropriate marks.
   /// The `mode` can be null.
   ///
@@ -350,18 +415,14 @@ class _ChartState extends State<Chart> {
                         ),
                       ],
                       selections: {
-                        // 'choose': IntervalSelection(),
-                        'touchMove': g.PointSelection(
-                          on: {g.GestureType.tapDown},
-                          dim: g.Dim.x,
+                        'tooltipMouse': g.PointSelection(
+                          on: {g.GestureType.hover},
+                          nearest: false,
+                          testRadius: 15.0,
+                          devices: {PointerDeviceKind.mouse},
                         ),
-                        // 'zoom': g.IntervalSelection(dim: g.Dim.x),
                       },
-                      tooltip: g.TooltipGuide(
-                        followPointer: [false, true],
-                        align: Alignment.topLeft,
-                        offset: const Offset(-20, -20),
-                      ),
+                      tooltip: g.TooltipGuide(renderer: _tooltipRenderer),
                       gestureStream: _gestureController,
                     ),
                     // if there is a selection
