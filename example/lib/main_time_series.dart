@@ -35,12 +35,12 @@ final tz = getLocation('America/Los_Angeles');
 
 class _MyHomePageState extends State<MyHomePage> {
   final traces = [
-    ScatterTrace<TZDateTime>(
+    ScatterTrace<TZDateTime,num>(
       x: prices[0]['x']!.map<TZDateTime>((e) => TZDateTime.parse(tz, e)).toList(),
       y: (prices[0]['y']! as List).cast<num>(),
       name: 'NP15', //prices[0]['name']!,
     ),
-    ScatterTrace<TZDateTime>(
+    ScatterTrace<TZDateTime,num>(
       x: prices[1]['x']!.map<TZDateTime>((e) => TZDateTime.parse(tz, e)).toList(),
       y: (prices[1]['y']! as List).cast<num>(),
       name: 'SP15', //prices[1]['name']!,

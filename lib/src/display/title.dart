@@ -1,9 +1,9 @@
 import 'layout.dart';
 
 class Title {
-  Title();
+  Title(this.text);
 
-  String? text;
+  final String text;
   bool autoMargin = true;
   PlotlyFont? font;
   num x = 0.5;
@@ -14,12 +14,12 @@ class Title {
   RefPosition? yRef;
 
   static Title getDefault() {
-    return Title();
+    return Title('');
   }
 
   static Title fromJson(Map<String, dynamic> x) {
-    var title = Title();
-    if (x.containsKey('text')) title.text = x['text'];
+    var title = Title('');
+    if (x.containsKey('text')) title = Title(x['text']);
     if (x.containsKey('automargin')) title.autoMargin = x['automargin'];
     if (x.containsKey('font')) title.font = PlotlyFont.fromJson(x['font']);
     if (x.containsKey('x')) title.x = x['x'];
@@ -53,8 +53,7 @@ class Title {
     AnchorYTitle? anchorY,
     RefPosition? yRef,
   }) {
-    var title = Title()
-      ..text = text
+    var title = Title(text ?? this.text)
       ..autoMargin = (autoMargin ?? true)
       ..font = font
       ..x = (x ?? 0.5)

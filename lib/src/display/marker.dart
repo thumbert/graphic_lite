@@ -1,6 +1,24 @@
+import 'dart:math';
+
 import 'enums.dart';
 
 class Marker {
+  Marker({
+    this.angle,
+    this.angleRef,
+    this.autoColorScale = true,
+    this.cAuto = true,
+    this.cMax,
+    this.cMid,
+    this.cMin,
+    this.color,
+    this.colorAxis,
+    num? size,
+    this.sizeMin = 0,
+  }) {
+    this.size = max(size ?? defaultSize, sizeMin);
+  }
+
   /// Default: 0
   /// Sets the marker angle in respect to `angleref`.
   num? angle;
@@ -54,8 +72,15 @@ class Marker {
   /// the same color axis.
   String? colorAxis;
 
+  /// Sets the marker size (in px).
+  late final num size;
+
+  final num sizeMin;
+
+  static const num defaultSize = 6;
+
   static Marker fromJson(Map<String, dynamic> x) {
-    var out = Marker();
+    var out = Marker(size: x['size'] ?? defaultSize);
     if (x.containsKey('angle')) out.angle = x['angle'];
     if (x.containsKey('angleref')) {
       out.angleRef = AngleRef.parse(x['angleref']);
@@ -63,7 +88,6 @@ class Marker {
     if (x.containsKey('autocolorscale')) {
       out.autoColorScale = x['autocolorscale'];
     }
-
     return out;
   }
 
@@ -72,6 +96,7 @@ class Marker {
       if (angle != null) 'angle': angle,
       if (angleRef != null) 'angleref': angleRef.toString(),
       if (!autoColorScale) 'autocolorscale': autoColorScale,
+      if (size != defaultSize) 'size': size,
     };
   }
 }

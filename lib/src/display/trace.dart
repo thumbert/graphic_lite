@@ -1,32 +1,40 @@
+import 'package:graphic_lite/src/display/marker.dart';
+
 import 'enums.dart';
 import 'layout.dart';
 import 'legend.dart';
 import 'text_position.dart';
 
-class ScatterTrace<D> {
+class ScatterTrace<D, R> {
   /// See https://plotly.com/javascript/reference/scatter/
   ScatterTrace({
     required this.x,
     required this.y,
     this.name,
     this.text,
-    this.mode,
+    String? mode,
+    this.marker,
   }) {
     assert(x.length == y.length);
+    this.mode = mode ?? defaultMode;
   }
   List<D> x;
-  List<num> y;
+  List<R> y;
 
+  /// Name of the trace, shown in the legend and on hover.
   String? name;
+
+  /// Sets the marker for the trace.
+  Marker? marker;
 
   /// Any combination of "lines", "markers", "text" joined with a "+".
   /// Examples: "lines", "markers", "lines+markers", "lines+markers+text".
   /// Determines the drawing mode for this scatter trace. If the provided `mode`
   /// includes "text" then the `text` elements appear at the coordinates.
-  /// Otherwise, the `text` elements appear on hover.  
-  String? mode;
+  /// Otherwise, the `text` elements appear on hover.
+  late final String mode;
 
-  /// If there are less than 20 points and the trace is not stacked then the 
+  /// If there are less than 20 points and the trace is not stacked then the
   /// default is "lines+markers".  Otherwise, "lines".
   String get defaultMode {
     if (y.length < 20) return 'lines+markers';

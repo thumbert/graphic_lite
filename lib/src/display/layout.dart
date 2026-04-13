@@ -1,6 +1,9 @@
+
 import 'legend.dart';
 import 'margin.dart';
 import 'title.dart';
+import 'x_axis.dart';
+import 'y_axis.dart';
 
 class Layout {
   Layout({
@@ -42,8 +45,8 @@ class Layout {
     }
     if (x.containsKey('showlegend')) layout.showLegend = x['showlegend'];
     if (x.containsKey('title')) layout.title = Title.fromJson(x['title']);
-    if (x.containsKey('xaxis')) layout.xAxis = XAxis.fromJson(x['xaxis']);
-    if (x.containsKey('yaxis')) layout.yAxis = YAxis.fromJson(x['yaxis']);
+    // if (x.containsKey('xaxis')) layout.xAxis = XAxis.fromJson(x['xaxis']);
+    // if (x.containsKey('yaxis')) layout.yAxis = YAxis.fromJson(x['yaxis']);
     if (x.containsKey('margin')) {
       layout.margin = Margin.fromJson(x['margin']);
     }
@@ -57,8 +60,8 @@ class Layout {
       if (!showLegend) 'showlegend': showLegend,
       if (legend != null) 'legend': legend!.toJson(),
       if (title != null) 'title': title!.toJson(),
-      if (xAxis != null) 'xaxis': xAxis!.toJson(),
-      if (yAxis != null) 'yaxis': yAxis!.toJson(),
+      // if (xAxis != null) 'xaxis': xAxis!.toJson(),
+      // if (yAxis != null) 'yaxis': yAxis!.toJson(),
       if (margin != null) 'margin': margin!.toJson(),
       if (displayLogo != false) 'displaylogo': displayLogo,
     };
@@ -246,46 +249,46 @@ class AxisLayer {
   String toString() => _value;
 }
 
-class AxisType {
-  const AxisType._internal(this._value);
-  final String _value;
+// class AxisType {
+//   const AxisType._internal(this._value);
+//   final String _value;
 
-  static const theDefault = AxisType._internal('-'); // automatic
-  static const linear = AxisType._internal('linear');
-  static const log = AxisType._internal('log');
-  static const date = AxisType._internal('date');
-  static const category = AxisType._internal('category');
-  static const multiCategory = AxisType._internal('multicategory');
+//   static const theDefault = AxisType._internal('-'); // automatic
+//   static const linear = AxisType._internal('linear');
+//   static const log = AxisType._internal('log');
+//   static const date = AxisType._internal('date');
+//   static const category = AxisType._internal('category');
+//   static const multiCategory = AxisType._internal('multicategory');
 
-  static AxisType parse(String value) {
-    var type = _map[value];
-    if (type == null) {
-      throw StateError('Don\'t know how to parse $value as an axis type');
-    }
-    return type;
-  }
+//   static AxisType parse(String value) {
+//     var type = _map[value];
+//     if (type == null) {
+//       throw StateError('Don\'t know how to parse $value as an axis type');
+//     }
+//     return type;
+//   }
 
-  static const _map = {
-    '-': AxisType.theDefault,
-    'linear': AxisType.linear,
-    'log': AxisType.log,
-    'date': AxisType.date,
-    'category': AxisType.category,
-    'multicategory': AxisType.multiCategory,
-  };
+//   static const _map = {
+//     '-': AxisType.theDefault,
+//     'linear': AxisType.linear,
+//     'log': AxisType.log,
+//     'date': AxisType.date,
+//     'category': AxisType.category,
+//     'multicategory': AxisType.multiCategory,
+//   };
 
-  static const values = <String>[
-    '-',
-    'linear',
-    'log',
-    'date',
-    'category',
-    'multicategory',
-  ];
+//   static const values = <String>[
+//     '-',
+//     'linear',
+//     'log',
+//     'date',
+//     'category',
+//     'multicategory',
+//   ];
 
-  @override
-  String toString() => _value;
-}
+//   @override
+//   String toString() => _value;
+// }
 
 class DashStyle {
   const DashStyle._internal(this._value);
@@ -512,148 +515,148 @@ class AxisTitle {
   }
 }
 
-class XAxis {
-  XAxis();
+// class XAxis {
+//   XAxis();
 
-  AnchorXAxis? anchor;
-  String? color;
-  String gridColor = '#eee';
-  DashStyle? gridDash;
-  int gridWidth = 1;
-  bool isVisible = true;
-  AxisLayer layer = AxisLayer.aboveTraces;
-  String lineColor = '#444';
-  SideX? side;
-  bool showGrid = true;
-  bool showZeroLine = false;
-  TicksPosition? ticksPosition;
-  TickMode? tickMode;
-  AxisTitle? title;
-  AxisType? type;
-  String zeroLineColor = '#444';
-  int zeroLineWidth = 1;
+//   AnchorXAxis? anchor;
+//   String? color;
+//   String gridColor = '#eee';
+//   DashStyle? gridDash;
+//   int gridWidth = 1;
+//   bool isVisible = true;
+//   AxisLayer layer = AxisLayer.aboveTraces;
+//   String lineColor = '#444';
+//   SideX? side;
+//   bool showGrid = true;
+//   bool showZeroLine = false;
+//   TicksPosition? ticksPosition;
+//   TickMode? tickMode;
+//   AxisTitle? title;
+//   AxisType? type;
+//   String zeroLineColor = '#444';
+//   int zeroLineWidth = 1;
 
-  static XAxis fromJson(Map<String, dynamic> x) {
-    var axis = XAxis();
-    if (x.containsKey('anchor')) axis.anchor = AnchorXAxis.parse(x['anchor']);
-    if (x.containsKey('color')) axis.color = x['color'];
-    if (x.containsKey('showgrid')) axis.showGrid = x['showgrid'];
-    if (x.containsKey('gridcolor')) axis.gridColor = x['gridcolor'];
-    if (x.containsKey('griddash')) {
-      axis.gridDash = DashStyle.parse(x['griddash']);
-    }
-    if (x.containsKey('gridwidth')) axis.gridWidth = x['gridwidth'];
-    if (x.containsKey('layer')) axis.layer = AxisLayer.parse(x['layer']);
-    if (x.containsKey('linecolor')) axis.lineColor = x['linecolor'];
-    if (x.containsKey('type')) axis.type = AxisType.parse(x['type']);
-    if (x.containsKey('visible')) axis.isVisible = x['visible'];
-    if (x.containsKey('zeroline')) axis.showZeroLine = x['zeroline'];
+//   static XAxis fromJson(Map<String, dynamic> x) {
+//     var axis = XAxis();
+//     if (x.containsKey('anchor')) axis.anchor = AnchorXAxis.parse(x['anchor']);
+//     if (x.containsKey('color')) axis.color = x['color'];
+//     if (x.containsKey('showgrid')) axis.showGrid = x['showgrid'];
+//     if (x.containsKey('gridcolor')) axis.gridColor = x['gridcolor'];
+//     if (x.containsKey('griddash')) {
+//       axis.gridDash = DashStyle.parse(x['griddash']);
+//     }
+//     if (x.containsKey('gridwidth')) axis.gridWidth = x['gridwidth'];
+//     if (x.containsKey('layer')) axis.layer = AxisLayer.parse(x['layer']);
+//     if (x.containsKey('linecolor')) axis.lineColor = x['linecolor'];
+//     if (x.containsKey('type')) axis.type = AxisType.parse(x['type']);
+//     if (x.containsKey('visible')) axis.isVisible = x['visible'];
+//     if (x.containsKey('zeroline')) axis.showZeroLine = x['zeroline'];
 
-    /// TODO: continue
-    if (x.containsKey('title')) {
-      axis.title = AxisTitle.fromMap(x['title']);
-    }
-    if (x.containsKey('side')) axis.side = SideX.parse(x['side']);
+//     /// TODO: continue
+//     if (x.containsKey('title')) {
+//       axis.title = AxisTitle.fromMap(x['title']);
+//     }
+//     if (x.containsKey('side')) axis.side = SideX.parse(x['side']);
 
-    return axis;
-  }
+//     return axis;
+//   }
 
-  Map<String, dynamic> toJson() {
-    return <String, dynamic>{
-      if (anchor != null) 'anchor': anchor.toString(),
-      if (color != null) 'color': color,
-      if (gridColor != '#eee') 'gridcolor': gridColor,
-      if (gridDash != null) 'griddash': gridDash.toString(),
-      if (gridWidth != 1) 'gridwidth': gridWidth,
-      if (lineColor != '#444') 'linecolor': lineColor,
-      if (!isVisible) 'visible': isVisible,
-      if (layer != AxisLayer.aboveTraces) 'layer': layer.toString(),
-      if (showZeroLine) 'zeroline': showZeroLine,
-      if (!showGrid) 'showgrid': showGrid,
-      if (side != null) 'side': side.toString(),
-      if (ticksPosition != null) 'ticks': ticksPosition.toString(),
-      if (tickMode != null) 'tickmode': tickMode.toString(),
-      if (title != null) 'title': title!.toMap(),
-      if (type != null) 'type': type.toString(),
-      if (zeroLineColor != '#444') 'zerolinecolor': zeroLineColor,
-      if (zeroLineWidth != 1) 'zerolinewidth': zeroLineWidth,
-    };
-  }
+//   Map<String, dynamic> toJson() {
+//     return <String, dynamic>{
+//       if (anchor != null) 'anchor': anchor.toString(),
+//       if (color != null) 'color': color,
+//       if (gridColor != '#eee') 'gridcolor': gridColor,
+//       if (gridDash != null) 'griddash': gridDash.toString(),
+//       if (gridWidth != 1) 'gridwidth': gridWidth,
+//       if (lineColor != '#444') 'linecolor': lineColor,
+//       if (!isVisible) 'visible': isVisible,
+//       if (layer != AxisLayer.aboveTraces) 'layer': layer.toString(),
+//       if (showZeroLine) 'zeroline': showZeroLine,
+//       if (!showGrid) 'showgrid': showGrid,
+//       if (side != null) 'side': side.toString(),
+//       if (ticksPosition != null) 'ticks': ticksPosition.toString(),
+//       if (tickMode != null) 'tickmode': tickMode.toString(),
+//       if (title != null) 'title': title!.toMap(),
+//       if (type != null) 'type': type.toString(),
+//       if (zeroLineColor != '#444') 'zerolinecolor': zeroLineColor,
+//       if (zeroLineWidth != 1) 'zerolinewidth': zeroLineWidth,
+//     };
+//   }
 
-  XAxis copyWith({AxisTitle? title}) {
-    var axis = XAxis()..title = title;
-    return axis;
-  }
-}
+//   XAxis copyWith({AxisTitle? title}) {
+//     var axis = XAxis()..title = title;
+//     return axis;
+//   }
+// }
 
-class YAxis {
-  YAxis();
+// class YAxis {
+//   YAxis();
 
-  AnchorYAxis? anchor;
-  String? color;
-  String gridColor = '#eee';
-  DashStyle? gridDash;
-  int gridWidth = 1;
-  bool isVisible = true;
-  AxisLayer layer = AxisLayer.aboveTraces;
-  String lineColor = '#444';
-  SideY? side;
-  bool showGrid = true;
-  bool showZeroLine = false;
-  TicksPosition? ticksPosition;
-  TickMode? tickMode;
-  AxisTitle? title;
-  AxisType? type;
-  String zeroLineColor = '#444';
-  int zeroLineWidth = 1;
+//   AnchorYAxis? anchor;
+//   String? color;
+//   String gridColor = '#eee';
+//   DashStyle? gridDash;
+//   int gridWidth = 1;
+//   bool isVisible = true;
+//   AxisLayer layer = AxisLayer.aboveTraces;
+//   String lineColor = '#444';
+//   SideY? side;
+//   bool showGrid = true;
+//   bool showZeroLine = false;
+//   TicksPosition? ticksPosition;
+//   TickMode? tickMode;
+//   AxisTitle? title;
+//   AxisType? type;
+//   String zeroLineColor = '#444';
+//   int zeroLineWidth = 1;
 
-  static YAxis fromJson(Map<String, dynamic> x) {
-    var axis = YAxis();
-    if (x.containsKey('anchor')) axis.anchor = AnchorYAxis.parse(x['anchor']);
-    if (x.containsKey('color')) axis.color = x['color'];
-    if (x.containsKey('gridcolor')) axis.gridColor = x['gridcolor'];
-    if (x.containsKey('griddash')) {
-      axis.gridDash = DashStyle.parse(x['griddash']);
-    }
-    if (x.containsKey('gridwidth')) axis.gridWidth = x['gridwidth'];
-    if (x.containsKey('layer')) axis.layer = AxisLayer.parse(x['layer']);
-    if (x.containsKey('linecolor')) axis.lineColor = x['linecolor'];
-    if (x.containsKey('showgrid')) axis.showGrid = x['showgrid'];
-    if (x.containsKey('type')) axis.type = AxisType.parse(x['type']);
-    if (x.containsKey('visible')) axis.isVisible = x['visible'];
-    if (x.containsKey('zeroline')) axis.showZeroLine = x['zeroline'];
+//   static YAxis fromJson(Map<String, dynamic> x) {
+//     var axis = YAxis();
+//     if (x.containsKey('anchor')) axis.anchor = AnchorYAxis.parse(x['anchor']);
+//     if (x.containsKey('color')) axis.color = x['color'];
+//     if (x.containsKey('gridcolor')) axis.gridColor = x['gridcolor'];
+//     if (x.containsKey('griddash')) {
+//       axis.gridDash = DashStyle.parse(x['griddash']);
+//     }
+//     if (x.containsKey('gridwidth')) axis.gridWidth = x['gridwidth'];
+//     if (x.containsKey('layer')) axis.layer = AxisLayer.parse(x['layer']);
+//     if (x.containsKey('linecolor')) axis.lineColor = x['linecolor'];
+//     if (x.containsKey('showgrid')) axis.showGrid = x['showgrid'];
+//     if (x.containsKey('type')) axis.type = AxisType.parse(x['type']);
+//     if (x.containsKey('visible')) axis.isVisible = x['visible'];
+//     if (x.containsKey('zeroline')) axis.showZeroLine = x['zeroline'];
 
-    /// TODO: continue
-    if (x.containsKey('title')) {
-      axis.title = AxisTitle.fromMap(x['title']);
-    }
-    if (x.containsKey('side')) axis.side = SideY.parse(x['side']);
+//     /// TODO: continue
+//     if (x.containsKey('title')) {
+//       axis.title = AxisTitle.fromMap(x['title']);
+//     }
+//     if (x.containsKey('side')) axis.side = SideY.parse(x['side']);
 
-    return axis;
-  }
+//     return axis;
+//   }
 
-  Map<String, dynamic> toJson() {
-    return <String, dynamic>{
-      if (anchor != null) 'anchor': anchor.toString(),
-      if (color != null) 'color': color,
-      if (gridColor != '#eee') 'gridcolor': gridColor,
-      if (gridDash != null) 'griddash': gridDash.toString(),
-      if (gridWidth != 1) 'gridwidth': gridWidth,
-      if (lineColor != '#444') 'linecolor': lineColor,
-      if (!isVisible) 'visible': isVisible,
-      if (layer != AxisLayer.aboveTraces) 'layer': layer.toString(),
-      if (showZeroLine) 'zeroline': showZeroLine,
-      if (!showGrid) 'showgrid': showGrid,
-      if (side != null) 'side': side.toString(),
-      if (ticksPosition != null) 'ticks': ticksPosition.toString(),
-      if (tickMode != null) 'tickmode': tickMode.toString(),
-      if (title != null) 'title': title!.toMap(),
-      if (type != null) 'type': type.toString(),
-      if (zeroLineColor != '#444') 'zerolinecolor': zeroLineColor,
-      if (zeroLineWidth != 1) 'zerolinewidth': zeroLineWidth,
-    };
-  }
-}
+//   Map<String, dynamic> toJson() {
+//     return <String, dynamic>{
+//       if (anchor != null) 'anchor': anchor.toString(),
+//       if (color != null) 'color': color,
+//       if (gridColor != '#eee') 'gridcolor': gridColor,
+//       if (gridDash != null) 'griddash': gridDash.toString(),
+//       if (gridWidth != 1) 'gridwidth': gridWidth,
+//       if (lineColor != '#444') 'linecolor': lineColor,
+//       if (!isVisible) 'visible': isVisible,
+//       if (layer != AxisLayer.aboveTraces) 'layer': layer.toString(),
+//       if (showZeroLine) 'zeroline': showZeroLine,
+//       if (!showGrid) 'showgrid': showGrid,
+//       if (side != null) 'side': side.toString(),
+//       if (ticksPosition != null) 'ticks': ticksPosition.toString(),
+//       if (tickMode != null) 'tickmode': tickMode.toString(),
+//       if (title != null) 'title': title!.toMap(),
+//       if (type != null) 'type': type.toString(),
+//       if (zeroLineColor != '#444') 'zerolinecolor': zeroLineColor,
+//       if (zeroLineWidth != 1) 'zerolinewidth': zeroLineWidth,
+//     };
+//   }
+// }
 
 enum Orientation {
   horizontal('h'),

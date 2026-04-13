@@ -1,4 +1,7 @@
 
+# 2026-04-13
+- Introduce separate files for x_axis and y_axis.
+- More arguments to the Marker constructor.
 
 # 2026-04-08
 - Add tooltip follow mouse.  Position tooltip to the right of the data point.

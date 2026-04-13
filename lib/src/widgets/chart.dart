@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/painting.dart';
 import 'package:graphic_lite/graphic_lite.dart';
 import 'package:graphic/graphic.dart' as g;
 
@@ -89,7 +88,7 @@ class _ChartState extends State<Chart> {
 
           // gesture.localPosition is already local to the chart
           final localEnd = geg.localPosition;
-          print('Drag ended at local position: $localEnd');
+          // print('Drag ended at local position: $localEnd');
 
           // Adjust these paddings to match your chart layout if needed.
           const leftPad = 40.0;
@@ -103,8 +102,8 @@ class _ChartState extends State<Chart> {
               : localStart.dx;
           final width = chartBox.size.width - leftPad - rightPad;
           if (width <= 0) return;
-          print('Chart width for selection: $width');
-          print('Raw selection range in local coordinates: [$left, $right]');
+          // print('Chart width for selection: $width');
+          // print('Raw selection range in local coordinates: [$left, $right]');
 
           double nx0 = ((left - leftPad) / width).clamp(0.0, 1.0);
           double nx1 = ((right - leftPad) / width).clamp(0.0, 1.0);
@@ -112,12 +111,12 @@ class _ChartState extends State<Chart> {
 
           final firstMs = _domainX.$1;
           final lastMs = _domainX.$2;
-          print('Selected normalized range: [$nx0, $nx1]');
-          print('Domain X: [${_domainX.$1}, ${_domainX.$2}]');
+          // print('Selected normalized range: [$nx0, $nx1]');
+          // print('Domain X: [${_domainX.$1}, ${_domainX.$2}]');
 
           final selMin = firstMs + nx0 * (lastMs - firstMs);
           final selMax = firstMs + nx1 * (lastMs - firstMs);
-          print('Selected domain range: [$selMin, $selMax]');
+          // print('Selected domain range: [$selMin, $selMax]');
 
           setState(() {
             _filteredData = data.where((e) {

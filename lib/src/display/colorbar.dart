@@ -58,7 +58,7 @@ class Colorbar {
   /// Determines whether this color bar's length (i.e. the measure in the color
   /// variation direction) is set in units of plot "fraction" or in "pixels.
   /// Use `len` to set the value.
-  PlotlyLenMode? lenMode;
+  LengthMode? lenMode;
 
   /// number greater than or equal to 0
   /// Default: 3
@@ -94,7 +94,7 @@ class Colorbar {
     }
     if (x.containsKey('len')) out.len = x['len'];
     if (x.containsKey('lenmode')) {
-      out.lenMode = PlotlyLenMode.parse(x['lenmode']);
+      out.lenMode = LengthMode.parse(x['lenmode']);
     }
     if (x.containsKey('minexponent')) out.minExponent = x['minexponent'];
 
