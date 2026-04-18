@@ -1,5 +1,7 @@
 
 Fix bug:  On zoom, the shape still shows even though it's not in the zoom region!
+TODO: Implement: title and axis labels
+
 
 # 2026-04-18
 - Implement Shapes in the layout. 
