@@ -1,6 +1,6 @@
-
 import 'legend.dart';
 import 'margin.dart';
+import 'shape.dart';
 import 'title.dart';
 import 'x_axis.dart';
 import 'y_axis.dart';
@@ -13,24 +13,23 @@ class Layout {
     this.yAxis,
     this.margin,
     this.hoverMode,
+    this.shapes,
+    this.showLegend = true,
   }) {
     if (title == null || title?.text == '') {
       margin ??= Margin();
     }
   }
 
-  /// NOTE: Although Plotly layout has (width, height) properties, we don't
-  /// keep it here as it gets set and controlled by the tab's rootNode
-  /// dimensions.
-  bool displayLogo = false;
   HoverMode? hoverMode;
-  bool showLegend = true;
+  final bool showLegend;
 
   Legend? legend;
   Title? title;
   XAxis? xAxis;
   YAxis? yAxis;
   Margin? margin;
+  List<Shape>? shapes;
 
   static Layout getDefault() => Layout();
 
@@ -43,14 +42,18 @@ class Layout {
     if (x.containsKey('legend')) {
       layout.legend = Legend.fromJson(x['legend']);
     }
-    if (x.containsKey('showlegend')) layout.showLegend = x['showlegend'];
+    // if (x.containsKey('showlegend')) layout.showLegend = x['showlegend'];
     if (x.containsKey('title')) layout.title = Title.fromJson(x['title']);
     // if (x.containsKey('xaxis')) layout.xAxis = XAxis.fromJson(x['xaxis']);
     // if (x.containsKey('yaxis')) layout.yAxis = YAxis.fromJson(x['yaxis']);
     if (x.containsKey('margin')) {
       layout.margin = Margin.fromJson(x['margin']);
     }
-    if (x.containsKey('displaylogo')) layout.displayLogo = x['displaylogo'];
+    if (x.containsKey('shapes')) {
+      layout.shapes = (x['shapes'] as List)
+          .map((e) => Shape.fromJson(e))
+          .toList();
+    }
     return layout;
   }
 
@@ -63,7 +66,7 @@ class Layout {
       // if (xAxis != null) 'xaxis': xAxis!.toJson(),
       // if (yAxis != null) 'yaxis': yAxis!.toJson(),
       if (margin != null) 'margin': margin!.toJson(),
-      if (displayLogo != false) 'displaylogo': displayLogo,
+      if (shapes != null) 'shapes': shapes!.map((e) => e.toJson()).toList(),
     };
   }
 
@@ -78,13 +81,12 @@ class Layout {
     bool? showLegend,
     HoverMode? hoverMode,
   }) {
-    return Layout()
+    return Layout(showLegend: showLegend ?? this.showLegend)
       ..title = title ?? this.title
       ..xAxis = xAxis ?? this.xAxis
       ..yAxis = yAxis ?? this.yAxis
       ..legend = legend ?? this.legend
       ..margin = margin ?? this.margin
-      ..showLegend = showLegend ?? this.showLegend
       ..hoverMode = hoverMode ?? this.hoverMode;
   }
 }
@@ -469,7 +471,6 @@ enum TickMode {
   @override
   String toString() => _value;
 }
-
 
 class PlotlyFont {
   String? color;

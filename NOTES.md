@@ -17,3 +17,4 @@ Supporting utilities:
 util/nice_numbers.dart — linearNiceNumbers(): Wilkinson Extended algorithm that picks aesthetically pleasing tick values; the first and last tick define the rendered axis extent
 util/nice_range.dart — linearNiceRange(): d3-inspired range snapping, only used when LinearScale(niceRange: true) is set
 So the axis domain that ends up painted is [ticks.first, ticks.last] for numeric axes (from linearNiceNumbers) and [min, max] with 10% margins for DateTime axes. That's exactly what our _domainX now replicates.
+

@@ -34,18 +34,25 @@ class MyHomePage extends StatefulWidget {
 final tz = getLocation('America/Los_Angeles');
 
 class _MyHomePageState extends State<MyHomePage> {
-  final traces = [
-    ScatterTrace<TZDateTime,num>(
-      x: prices[0]['x']!.map<TZDateTime>((e) => TZDateTime.parse(tz, e)).toList(),
-      y: (prices[0]['y']! as List).cast<num>(),
-      name: 'NP15', //prices[0]['name']!,
-    ),
-    ScatterTrace<TZDateTime,num>(
-      x: prices[1]['x']!.map<TZDateTime>((e) => TZDateTime.parse(tz, e)).toList(),
-      y: (prices[1]['y']! as List).cast<num>(),
-      name: 'SP15', //prices[1]['name']!,
-    ),
-  ];
+  Chart makeChart() {
+    final traces = [
+      ScatterTrace<TZDateTime, num>(
+        x: prices[0]['x']!
+            .map<TZDateTime>((e) => TZDateTime.parse(tz, e))
+            .toList(),
+        y: (prices[0]['y']! as List).cast<num>(),
+        name: 'NP15',
+      ),
+      ScatterTrace<TZDateTime, num>(
+        x: prices[1]['x']!
+            .map<TZDateTime>((e) => TZDateTime.parse(tz, e))
+            .toList(),
+        y: (prices[1]['y']! as List).cast<num>(),
+        name: 'SP15',
+      ),
+    ];
+    return Chart(traces: traces);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -58,7 +65,7 @@ class _MyHomePageState extends State<MyHomePage> {
         padding: const EdgeInsets.all(32.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[Expanded(child: Chart(traces: traces))],
+          children: <Widget>[Expanded(child: makeChart())],
         ),
       ),
     );

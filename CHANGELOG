@@ -1,4 +1,9 @@
 
+Fix bug:  On zoom, the shape still shows even though it's not in the zoom region!
+
+# 2026-04-18
+- Implement Shapes in the layout. 
+
 # 2026-04-13
 - Introduce separate files for x_axis and y_axis.
 - More arguments to the Marker constructor.

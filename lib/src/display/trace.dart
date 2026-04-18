@@ -13,10 +13,18 @@ class ScatterTrace<D, R> {
     this.name,
     this.text,
     String? mode,
-    this.marker,
+    List<Marker>? marker,
   }) {
     assert(x.length == y.length);
     this.mode = mode ?? defaultMode;
+    if (this.mode.contains('markers')) {
+      if (marker != null) {
+        assert(marker.length == 1 || marker.length == x.length);
+      } else {
+        marker = [Marker(size: 6.0)];
+      }
+      this.marker = marker;
+    }
   }
   List<D> x;
   List<R> y;
@@ -24,8 +32,10 @@ class ScatterTrace<D, R> {
   /// Name of the trace, shown in the legend and on hover.
   String? name;
 
-  /// Sets the marker for the trace.
-  Marker? marker;
+  /// Sets the marker for the trace.  A list with only one element means that
+  /// the value applies to all elements of the trace. See `Marker` for
+  /// more details.
+  late List<Marker>? marker;
 
   /// Any combination of "lines", "markers", "text" joined with a "+".
   /// Examples: "lines", "markers", "lines+markers", "lines+markers+text".
@@ -406,7 +416,7 @@ class ScatterTrace<D, R> {
       if (legendRank != 1000) 'legendrank': legendRank,
       if (legendGroup != '') 'legendgroup': legendGroup,
       if (opacity != 1) 'opacity': opacity,
-      if (mode != null) 'mode': mode,
+      'mode': mode,
       if (ids != null) 'ids': ids,
       if (x0 != 0) 'x0': x0,
       if (dx != 1) 'dx': dx,

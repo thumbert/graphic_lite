@@ -5,6 +5,88 @@ import 'package:flutter/material.dart';
 import 'package:graphic_lite/graphic_lite.dart';
 import 'package:graphic/graphic.dart' as g;
 
+/// CustomPainter that draws [Shape] overlays on top of the chart.
+///
+/// Coordinate systems supported via [Shape.xRef] / [Shape.yRef]:
+///   - `'x'` / `'y'`  — data coordinates (default)
+///   - `'paper'`       — normalised 0–1 across the plot area
+class _ShapesPainter extends CustomPainter {
+  _ShapesPainter({
+    required this.shapes,
+    required this.domainX,
+    required this.domainY,
+  });
+
+  final List<Shape> shapes;
+  final (num, num) domainX;
+  final (num, num) domainY;
+
+  // Must match the padding used by g.Chart in the build method.
+  static const double _leftPad = 40.0;
+  static const double _topPad = 5.0;
+  static const double _rightPad = 10.0;
+  static const double _bottomPad = 40.0;
+
+  Offset _toPixel(double dx, double dy, Size size, String xRef, String yRef) {
+    final plotW = size.width - _leftPad - _rightPad;
+    final plotH = size.height - _topPad - _bottomPad;
+
+    final px = xRef == 'paper'
+        ? _leftPad + dx * plotW
+        : _leftPad + (dx - domainX.$1) / (domainX.$2 - domainX.$1) * plotW;
+
+    // y axis: data 0 = bottom of plot, increasing upward → invert.
+    final py = yRef == 'paper'
+        ? _topPad + (1.0 - dy) * plotH
+        : _topPad +
+              (1.0 - (dy - domainY.$1) / (domainY.$2 - domainY.$1)) * plotH;
+
+    return Offset(px, py);
+  }
+
+  static Color _applyOpacity(Color c, double opacity) =>
+      Color.fromARGB((c.alpha * opacity).round(), c.red, c.green, c.blue);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final shape in shapes) {
+      if (shape.visibility != ShapeVisibility.visible) continue;
+
+      final p0 = _toPixel(shape.x0, shape.y0, size, shape.xRef, shape.yRef);
+      final p1 = _toPixel(shape.x1, shape.y1, size, shape.xRef, shape.yRef);
+      final opacity = shape.fillColor.a.toDouble();
+
+      final fillPaint = Paint()
+        ..color = _applyOpacity(shape.fillColor, opacity)
+        ..style = PaintingStyle.fill;
+
+      final strokePaint = Paint()
+        ..color = _applyOpacity(shape.line.color, opacity)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = shape.line.width.toDouble();
+
+      switch (shape.type) {
+        case ShapeType.rectangle:
+          final rect = Rect.fromPoints(p0, p1);
+          canvas.drawRect(rect, fillPaint);
+          if (shape.line.width > 0) canvas.drawRect(rect, strokePaint);
+        case ShapeType.circle:
+          final rect = Rect.fromPoints(p0, p1);
+          canvas.drawOval(rect, fillPaint);
+          if (shape.line.width > 0) canvas.drawOval(rect, strokePaint);
+        case ShapeType.line:
+          canvas.drawLine(p0, p1, strokePaint);
+        case ShapeType.path:
+          break; // not yet implemented
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ShapesPainter old) =>
+      old.shapes != shapes || old.domainX != domainX || old.domainY != domainY;
+}
+
 class Chart extends StatefulWidget {
   Chart({super.key, required this.traces, Layout? layout})
     : layout = layout ?? Layout.getDefault();
@@ -37,7 +119,6 @@ class _ChartState extends State<Chart> {
   Offset? _dragStart;
   List<Map<String, dynamic>> _filteredData = [];
   List<double>? _currentSelectionNormalized;
-  late (num, num) _domainX;
 
   @override
   void initState() {
@@ -155,9 +236,16 @@ class _ChartState extends State<Chart> {
   /// Whether the x-axis uses DateTime values (affects domain/filter logic).
   bool _xIsDateTime = false;
 
+  late (num, num) _domainX;
+  late (num, num) _domainY;
+
+  /// Prepare the data for [graphics].
+  ///
   List<Map<String, dynamic>> makeData(List<ScatterTrace> traces) {
-    var minNum = double.infinity;
-    var maxNum = double.negativeInfinity;
+    var minXNum = double.infinity;
+    var maxXNum = double.negativeInfinity;
+    var minYNum = double.infinity;
+    var maxYNum = double.negativeInfinity;
     DateTime? minDt;
     DateTime? maxDt;
     final data = <Map<String, dynamic>>[];
@@ -170,13 +258,26 @@ class _ChartState extends State<Chart> {
           if (minDt == null || xVal.isBefore(minDt)) minDt = xVal;
           if (maxDt == null || xVal.isAfter(maxDt)) maxDt = xVal;
         } else if (xVal is num) {
-          if (xVal < minNum) minNum = xVal.toDouble();
-          if (xVal > maxNum) maxNum = xVal.toDouble();
+          if (xVal < minXNum) minXNum = xVal.toDouble();
+          if (xVal > maxXNum) maxXNum = xVal.toDouble();
+        }
+        final yVal = trace.y[j];
+        if (yVal is num) {
+          if (yVal < minYNum) minYNum = yVal.toDouble();
+          if (yVal > maxYNum) maxYNum = yVal.toDouble();
         }
         data.add({
           'x': trace.x[j],
           'y': trace.y[j],
           'name': trace.name ?? 'trace $i',
+          if (trace.text != null)
+            'text': trace.text!.length == 1
+                ? trace.text!.first
+                : trace.text![j],
+          if (trace.marker != null)
+            'marker': trace.marker!.length == 1
+                ? trace.marker!.first
+                : trace.marker![j],
         });
       }
     }
@@ -190,9 +291,11 @@ class _ChartState extends State<Chart> {
       _domainX = (minMicro - 0.1 * range, maxMicro + 0.1 * range);
     } else {
       _xIsDateTime = false;
-      final range = maxNum == minNum ? 10 : maxNum - minNum;
-      _domainX = (minNum - 0.1 * range, maxNum + 0.1 * range);
+      final xRange = maxXNum == minXNum ? 10.0 : maxXNum - minXNum;
+      _domainX = (minXNum - 0.1 * xRange, maxXNum + 0.1 * xRange);
     }
+    final yRange = maxYNum == minYNum ? 10.0 : maxYNum - minYNum;
+    _domainY = (minYNum - 0.1 * yRange, maxYNum + 0.1 * yRange);
     return data;
   }
 
@@ -202,7 +305,10 @@ class _ChartState extends State<Chart> {
     accessor: (Map map) => map['x'] as DateTime,
   );
   final variableXString = g.Variable(accessor: (Map map) => map['x'] as String);
+
+  final variableYInt = g.Variable(accessor: (Map map) => map['y'] as int);
   final variableYNum = g.Variable(accessor: (Map map) => map['y'] as num);
+  final variableYString = g.Variable(accessor: (Map map) => map['y'] as String);
 
   /// Variables for the chart as needed by package `graphic`.
   ///
@@ -210,36 +316,29 @@ class _ChartState extends State<Chart> {
     List<Map<String, dynamic>> data,
     List<ScatterTrace> traces,
   ) {
-    switch (traces.first.x.first) {
-      case int _:
-        return {
-          'x': variableXInt,
-          'y': variableYNum,
-          'name': g.Variable(accessor: (Map map) => map['name'] as String),
-        };
-      case num _:
-        return {
-          'x': variableXNum,
-          'y': variableYNum,
-          'name': g.Variable(accessor: (Map map) => map['name'] as String),
-        };
-      case DateTime _:
-        return {
-          'x': variableXDateTime,
-          'y': variableYNum,
-          'name': g.Variable(accessor: (Map map) => map['name'] as String),
-        };
-      case String _:
-        return {
-          'x': variableXString,
-          'y': variableYNum,
-          'name': g.Variable(accessor: (Map map) => map['name'] as String),
-        };
-      default:
-        throw Exception(
-          'Unsupported x value type: ${traces.first.x.first.runtimeType}',
-        );
-    }
+    final out = <String, g.Variable<Map<dynamic, dynamic>, dynamic>>{};
+    out['x'] = switch (traces) {
+      (List<ScatterTrace<int, dynamic>> _) => variableXInt,
+      (List<ScatterTrace<num, dynamic>> _) => variableXNum,
+      (List<ScatterTrace<DateTime, dynamic>> _) => variableXDateTime,
+      (List<ScatterTrace<String, dynamic>> _) => variableXString,
+      _ => throw Exception('Unsupported x value type in traces'),
+    };
+    out['y'] = switch (traces) {
+      (List<ScatterTrace<dynamic, int>> _) => variableYInt,
+      (List<ScatterTrace<dynamic, num>> _) => variableYNum,
+      // (List<ScatterTrace<dynamic, DateTime>> _) => variableYDateTime,
+      (List<ScatterTrace<dynamic, String>> _) => variableYString,
+      _ => throw Exception('Unsupported y value type in traces'),
+    };
+    out['name'] = g.Variable(accessor: (Map map) => map['name'] as String);
+    out['text'] = g.Variable(
+      accessor: (Map map) => (map['text'] ?? '') as String,
+    );
+    out['marker.size'] = g.Variable(
+      accessor: (Map map) => (map['marker'] as Marker?)?.size.toDouble() ?? 6.0,
+    );
+    return out;
   }
 
   /// Custom tooltip renderer that colors the tooltip text to match the
@@ -265,8 +364,11 @@ class _ChartState extends State<Chart> {
 
     final xVal = tuple['x'];
     final yVal = tuple['y'];
+    final pointText = tuple['text'] as String? ?? '';
     final xStr = xVal is DateTime ? xVal.toIso8601String() : xVal.toString();
-    final text = '($xStr, $yVal) $name';
+    final text = pointText.isNotEmpty
+        ? '($xStr, $yVal) $name\n$pointText'
+        : '($xStr, $yVal) $name';
 
     final textStyle = TextStyle(color: traceColor, fontSize: 12);
     const padding = EdgeInsets.all(5.0);
@@ -318,8 +420,7 @@ class _ChartState extends State<Chart> {
               final trace = traces[i];
               if (trace.visible == TraceVisibility.off) continue;
               if ((trace.name ?? 'trace $i') == e['name']) {
-                final mode = trace.mode ?? trace.defaultMode;
-                if (mode.contains('lines')) {
+                if (trace.mode.contains('lines')) {
                   return Defaults.colors[i];
                 }
               }
@@ -335,7 +436,7 @@ class _ChartState extends State<Chart> {
               final trace = traces[i];
               if (trace.visible == TraceVisibility.off) continue;
               if ((trace.name ?? 'trace $i') == e['name']) {
-                final mode = trace.mode ?? trace.defaultMode;
+                final mode = trace.mode;
                 if (mode.contains('markers')) {
                   return Defaults.colors[i];
                 }
@@ -349,10 +450,9 @@ class _ChartState extends State<Chart> {
             for (var i = 0; i < traces.length; i++) {
               final trace = traces[i];
               if (trace.visible == TraceVisibility.off) continue;
-              if ((trace.name ?? 'trace $i') == e['name'] &&
-                  trace.mode != null) {
-                if (trace.mode!.contains('markers')) {
-                  return 6.0;
+              if ((trace.name ?? 'trace $i') == e['name']) {
+                if (trace.mode.contains('markers')) {
+                  return e['marker.size'] as double;
                 }
               }
             }
@@ -424,6 +524,20 @@ class _ChartState extends State<Chart> {
                       tooltip: g.TooltipGuide(renderer: _tooltipRenderer),
                       gestureStream: _gestureController,
                     ),
+                    // shapes overlay
+                    if (widget.layout.shapes != null &&
+                        widget.layout.shapes!.isNotEmpty)
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: CustomPaint(
+                            painter: _ShapesPainter(
+                              shapes: widget.layout.shapes!,
+                              domainX: widget.layout.xAxis?.range ?? _domainX,
+                              domainY: widget.layout.yAxis?.range ?? _domainY,
+                            ),
+                          ),
+                        ),
+                      ),
                     // if there is a selection
                     if (_currentSelectionNormalized != null)
                       Positioned(
@@ -458,7 +572,7 @@ class _ChartState extends State<Chart> {
       children: List.generate(widget.traces.length, (i) {
         final trace = widget.traces[i];
         final label = trace.name ?? 'trace $i';
-        final mode = trace.mode ?? trace.defaultMode;
+        final mode = trace.mode;
         final isVisible = trace.visible == TraceVisibility.on;
         final color = isVisible ? Defaults.colors[i] : Colors.grey.shade400;
         return MouseRegion(
