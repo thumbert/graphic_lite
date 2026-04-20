@@ -9,7 +9,7 @@ import 'package:graphic/graphic.dart' as g;
 ///
 /// Coordinate systems supported via [Shape.xRef] / [Shape.yRef]:
 ///   - `'x'` / `'y'`  — data coordinates (default)
-///   - `'paper'`       — normalised 0–1 across the plot area
+///   - `'paper'`      — normalized 0–1 across the plot area
 class _ShapesPainter extends CustomPainter {
   _ShapesPainter({
     required this.shapes,
@@ -45,10 +45,20 @@ class _ShapesPainter extends CustomPainter {
   }
 
   static Color _applyOpacity(Color c, double opacity) =>
-      Color.fromARGB((c.alpha * opacity).round(), c.red, c.green, c.blue);
+      c.withValues(alpha: opacity);
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Clip all drawing to the plot area so shapes never overflow the axes.
+    final plotRect = Rect.fromLTRB(
+      _leftPad,
+      _topPad,
+      size.width - _rightPad,
+      size.height - _bottomPad,
+    );
+    canvas.save();
+    canvas.clipRect(plotRect);
+
     for (final shape in shapes) {
       if (shape.visibility != ShapeVisibility.visible) continue;
 
@@ -61,7 +71,7 @@ class _ShapesPainter extends CustomPainter {
         ..style = PaintingStyle.fill;
 
       final strokePaint = Paint()
-        ..color = _applyOpacity(shape.line.color, opacity)
+        ..color = shape.line.color
         ..style = PaintingStyle.stroke
         ..strokeWidth = shape.line.width.toDouble();
 
@@ -80,6 +90,8 @@ class _ShapesPainter extends CustomPainter {
           break; // not yet implemented
       }
     }
+
+    canvas.restore();
   }
 
   @override
@@ -112,6 +124,9 @@ class _ChartState extends State<Chart> {
   /// handling logic to filter data points based on user interactions
   /// (like drag selection).
   late List<Map<String, dynamic>> data;
+
+  (num, num)? _filteredDomainX;
+  (num, num)? _filteredDomainY;
 
   final StreamController<g.GestureEvent> _gestureController =
       StreamController<g.GestureEvent>.broadcast();
@@ -206,6 +221,11 @@ class _ChartState extends State<Chart> {
                   : (e['x'] as num).toDouble();
               return xNum >= selMin && xNum <= selMax;
             }).toList();
+            if (_filteredData.isNotEmpty) {
+              // X range = exact selection bounds; Y range = data extent of filtered points.
+              _filteredDomainX = (selMin, selMax);
+              _filteredDomainY = _computeYDomainFromData(_filteredData);
+            }
             // clear live selection overlay once selection is committed
             _currentSelectionNormalized = null;
           });
@@ -214,6 +234,8 @@ class _ChartState extends State<Chart> {
         } else if (geg.type == g.GestureType.doubleTap) {
           setState(() {
             _filteredData = [];
+            _filteredDomainX = null;
+            _filteredDomainY = null;
             _currentSelectionNormalized = null;
           });
         }
@@ -238,6 +260,20 @@ class _ChartState extends State<Chart> {
 
   late (num, num) _domainX;
   late (num, num) _domainY;
+
+  (num, num) _computeYDomainFromData(List<Map<String, dynamic>> pts) {
+    var minY = double.infinity;
+    var maxY = double.negativeInfinity;
+    for (final e in pts) {
+      final yVal = e['y'];
+      if (yVal is num) {
+        if (yVal < minY) minY = yVal.toDouble();
+        if (yVal > maxY) maxY = yVal.toDouble();
+      }
+    }
+    final yRange = maxY == minY ? 1.0 : maxY - minY;
+    return (minY - 0.1 * yRange, maxY + 0.1 * yRange);
+  }
 
   /// Prepare the data for [graphics].
   ///
@@ -312,25 +348,70 @@ class _ChartState extends State<Chart> {
 
   /// Variables for the chart as needed by package `graphic`.
   ///
+  /// When [domainX] / [domainY] are provided, explicit axis scales are set so
+  /// that the chart shows exactly the selected range.
   Map<String, g.Variable<Map<dynamic, dynamic>, dynamic>> makeVariables(
     List<Map<String, dynamic>> data,
-    List<ScatterTrace> traces,
-  ) {
+    List<ScatterTrace> traces, {
+    (num, num)? domainX,
+    (num, num)? domainY,
+  }) {
     final out = <String, g.Variable<Map<dynamic, dynamic>, dynamic>>{};
-    out['x'] = switch (traces) {
-      (List<ScatterTrace<int, dynamic>> _) => variableXInt,
-      (List<ScatterTrace<num, dynamic>> _) => variableXNum,
-      (List<ScatterTrace<DateTime, dynamic>> _) => variableXDateTime,
-      (List<ScatterTrace<String, dynamic>> _) => variableXString,
-      _ => throw Exception('Unsupported x value type in traces'),
-    };
-    out['y'] = switch (traces) {
-      (List<ScatterTrace<dynamic, int>> _) => variableYInt,
-      (List<ScatterTrace<dynamic, num>> _) => variableYNum,
-      // (List<ScatterTrace<dynamic, DateTime>> _) => variableYDateTime,
-      (List<ScatterTrace<dynamic, String>> _) => variableYString,
-      _ => throw Exception('Unsupported y value type in traces'),
-    };
+    if (domainX != null) {
+      final xScale = _xIsDateTime
+          ? g.TimeScale(
+              min: DateTime.fromMicrosecondsSinceEpoch(domainX.$1.round()),
+              max: DateTime.fromMicrosecondsSinceEpoch(domainX.$2.round()),
+            )
+          : g.LinearScale(min: domainX.$1, max: domainX.$2);
+      out['x'] = switch (traces) {
+        (List<ScatterTrace<int, dynamic>> _) => g.Variable(
+          accessor: (Map map) => map['x'] as int,
+          scale: xScale as g.Scale<int, num>,
+        ),
+        (List<ScatterTrace<num, dynamic>> _) => g.Variable(
+          accessor: (Map map) => map['x'] as num,
+          scale: xScale as g.Scale<num, num>,
+        ),
+        (List<ScatterTrace<DateTime, dynamic>> _) => g.Variable(
+          accessor: (Map map) => map['x'] as DateTime,
+          scale: xScale as g.Scale<DateTime, num>,
+        ),
+        (List<ScatterTrace<String, dynamic>> _) => variableXString,
+        _ => throw Exception('Unsupported x value type in traces'),
+      };
+    } else {
+      out['x'] = switch (traces) {
+        (List<ScatterTrace<int, dynamic>> _) => variableXInt,
+        (List<ScatterTrace<num, dynamic>> _) => variableXNum,
+        (List<ScatterTrace<DateTime, dynamic>> _) => variableXDateTime,
+        (List<ScatterTrace<String, dynamic>> _) => variableXString,
+        _ => throw Exception('Unsupported x value type in traces'),
+      };
+    }
+    if (domainY != null) {
+      final yScale = g.LinearScale(min: domainY.$1, max: domainY.$2);
+      out['y'] = switch (traces) {
+        (List<ScatterTrace<dynamic, int>> _) => g.Variable(
+          accessor: (Map map) => map['y'] as int,
+          scale: yScale as g.Scale<int, num>,
+        ),
+        (List<ScatterTrace<dynamic, num>> _) => g.Variable(
+          accessor: (Map map) => map['y'] as num,
+          scale: yScale as g.Scale<num, num>,
+        ),
+        (List<ScatterTrace<dynamic, String>> _) => variableYString,
+        _ => throw Exception('Unsupported y value type in traces'),
+      };
+    } else {
+      out['y'] = switch (traces) {
+        (List<ScatterTrace<dynamic, int>> _) => variableYInt,
+        (List<ScatterTrace<dynamic, num>> _) => variableYNum,
+        // (List<ScatterTrace<dynamic, DateTime>> _) => variableYDateTime,
+        (List<ScatterTrace<dynamic, String>> _) => variableYString,
+        _ => throw Exception('Unsupported y value type in traces'),
+      };
+    }
     out['name'] = g.Variable(accessor: (Map map) => map['name'] as String);
     out['text'] = g.Variable(
       accessor: (Map map) => (map['text'] ?? '') as String,
@@ -466,10 +547,15 @@ class _ChartState extends State<Chart> {
   @override
   Widget build(BuildContext context) {
     data = makeData(widget.traces);
-    final variables = makeVariables(data, widget.traces);
-    final visibilityKey = widget.traces
-        .map((t) => t.visible.toString())
-        .join('-');
+    final variables = makeVariables(
+      data,
+      widget.traces,
+      domainX: _filteredDomainX,
+      domainY: _filteredDomainY,
+    );
+    final visibilityKey =
+        '${widget.traces.map((t) => t.visible.toString()).join('-')}'
+        '|$_filteredDomainX|$_filteredDomainY';
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -483,6 +569,24 @@ class _ChartState extends State<Chart> {
                 key: _chartKey,
                 child: Stack(
                   children: [
+                    // shapes below the chart data
+                    if (widget.layout.shapes != null &&
+                        widget.layout.shapes!.any(
+                          (s) => s.layer == ShapeLayer.below,
+                        ))
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: CustomPaint(
+                            painter: _ShapesPainter(
+                              shapes: widget.layout.shapes!
+                                  .where((s) => s.layer == ShapeLayer.below)
+                                  .toList(),
+                              domainX: (_filteredDomainX ?? _domainX),
+                              domainY: (_filteredDomainY ?? _domainY),
+                            ),
+                          ),
+                        ),
+                      ),
                     g.Chart(
                       key: ValueKey(visibilityKey),
                       padding: (_) => const EdgeInsets.fromLTRB(40, 5, 10, 40),
@@ -524,16 +628,20 @@ class _ChartState extends State<Chart> {
                       tooltip: g.TooltipGuide(renderer: _tooltipRenderer),
                       gestureStream: _gestureController,
                     ),
-                    // shapes overlay
+                    // shapes above the chart data
                     if (widget.layout.shapes != null &&
-                        widget.layout.shapes!.isNotEmpty)
+                        widget.layout.shapes!.any(
+                          (s) => s.layer == ShapeLayer.above,
+                        ))
                       Positioned.fill(
                         child: IgnorePointer(
                           child: CustomPaint(
                             painter: _ShapesPainter(
-                              shapes: widget.layout.shapes!,
-                              domainX: widget.layout.xAxis?.range ?? _domainX,
-                              domainY: widget.layout.yAxis?.range ?? _domainY,
+                              shapes: widget.layout.shapes!
+                                  .where((s) => s.layer == ShapeLayer.above)
+                                  .toList(),
+                              domainX: (_filteredDomainX ?? _domainX),
+                              domainY: (_filteredDomainY ?? _domainY),
                             ),
                           ),
                         ),

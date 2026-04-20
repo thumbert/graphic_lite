@@ -92,7 +92,8 @@ Chart dataLabelsHover() {
         y0: 0,
         y1: 1,
         yRef: 'paper',
-        fillColor: Colors.blue.withAlpha(128),
+        fillColor: Colors.blue.withAlpha(64),
+        layer: ShapeLayer.below,
       ),
     ],
   );

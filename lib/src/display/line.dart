@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 class Line {
   Line({
-    this.color = const Color(0x00000000),
+    this.color = Colors.transparent,
     this.dash = Dash.solid,
     this.width = 2.0,
   });
