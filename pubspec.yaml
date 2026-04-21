@@ -2,7 +2,7 @@ name: graphic_lite
 description: "A high level graphics library for Flutter with an API inspired by Plotly JS"
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
-version: 0.0.1
+version: 0.0.3
 
 environment:
   sdk: ^3.11.0

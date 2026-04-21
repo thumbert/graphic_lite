@@ -41,9 +41,9 @@ class LineAndScatterCharts extends State<MyHomePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            // Expanded(child: simple()),
+            Expanded(child: simple()),
             // const SizedBox(height: 32),
-            Expanded(child: dataLabelsHover()),
+            // Expanded(child: dataLabelsOnHover()),
           ],
         ),
       ),
@@ -53,14 +53,36 @@ class LineAndScatterCharts extends State<MyHomePage> {
 
 Chart simple() {
   final traces = [
-    ScatterTrace(x: [1, 2, 3, 4], y: [10, 15, 13, 17], mode: 'markers'),
-    ScatterTrace(x: [2, 3, 4, 5], y: [16, 5, 11, 9], mode: 'lines'),
-    ScatterTrace(x: [1, 2, 3, 4], y: [12, 9, 15, 12], mode: 'lines+markers'),
+    ScatterTrace(
+      x: [1, 2, 3, 4],
+      y: [10, 15, 13, 17],
+      mode: 'markers',
+      name: 'Points',
+    ),
+    ScatterTrace(
+      x: [2, 3, 4, 5],
+      y: [16, 5, 11, 9],
+      mode: 'lines',
+      name: 'Line',
+    ),
+    ScatterTrace(
+      x: [1, 2, 3, 4],
+      y: [12, 9, 15, 12],
+      mode: 'lines+markers',
+      name: 'Points and Line',
+    ),
   ];
-  return Chart(traces: traces);
+  final layout = Layout(
+    title: Title('Simple Scatter Plot'),
+    xAxis: XAxis(title: Title('X Axis')),
+    yAxis: YAxis(title: Title('Y Axis')),
+    legend: Legend(side: .bottom, mainAxisAlignment: .start),
+    // legend: Legend(side: .right, mainAxisAlignment: .center),
+  );
+  return Chart(traces: traces, layout: layout);
 }
 
-Chart dataLabelsHover() {
+Chart dataLabelsOnHover() {
   final traces = [
     ScatterTrace<num, num>(
       x: [1, 2, 3, 4, 5],

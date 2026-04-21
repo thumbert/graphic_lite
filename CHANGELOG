@@ -1,6 +1,11 @@
 
 TODO: Implement: title and axis labels
 
+# 2026-04-20 (version 0.0.3)
+- Implemented title and axis labels
+- Legend now expands to fit the content
+- Implemented legend positioning (right, bottom, top) 
+
 # 2026-04-19
 - Make sure that the treatment of Shapes during a selection event is correct.
 

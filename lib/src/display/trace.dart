@@ -24,6 +24,8 @@ class ScatterTrace<D, R> {
         marker = [Marker(size: 6.0)];
       }
       this.marker = marker;
+    } else {
+      this.marker = null;
     }
   }
   List<D> x;

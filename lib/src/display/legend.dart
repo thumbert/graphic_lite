@@ -1,8 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-
-import 'layout.dart';
+import 'package:graphic_lite/graphic_lite.dart';
 
 enum GroupClick { toggleItem, toggleGroup }
 
@@ -12,7 +11,7 @@ enum ItemDoubleClick { toggle, toggleOthers, disabled }
 
 enum ItemSizing { trace, constant }
 
-enum Side { top, left, topLeft, topCenter, topRight }
+// enum Side { top, left, topLeft, topCenter, topRight }
 
 enum TraceOrder { normal, reversed, grouped, groupedReversed }
 
@@ -29,13 +28,32 @@ enum YAnchor { auto, top, middle, bottom }
 
 /// See https://plotly.com/javascript/reference/layout/#layout-legend
 class Legend {
+  Legend({
+    Side? side,
+    MainAxisAlignment? mainAxisAlignment,
+    CrossAxisAlignment? crossAxisAlignment,
+  }) {
+    if (side != null) {
+      this.side = side;
+    }
+    if (mainAxisAlignment != null) {
+      this.mainAxisAlignment = mainAxisAlignment;
+    }
+    if (crossAxisAlignment != null) {
+      this.crossAxisAlignment = crossAxisAlignment;
+    }
+  }
+  // LegendOrientation orientation = LegendOrientation.vertical;
+  Side side = Side.right;
+  MainAxisAlignment mainAxisAlignment = MainAxisAlignment.start;
+  CrossAxisAlignment crossAxisAlignment = CrossAxisAlignment.start;
+
   Color? backgroundColor;
   Color? borderColor;
   double? borderWidth;
   double? entryWidth;
   // Font? font;
 
-  LegendOrientation orientation = LegendOrientation.vertical;
   LegendTitle? title;
 
   /// Sets the indentation (in px) of the legend entries.
@@ -99,16 +117,16 @@ class Legend {
 
   static Legend fromJson(Map<String, dynamic> x) {
     var legend = Legend();
-    if (x.containsKey('orientation')) {
-      legend.orientation = LegendOrientation.parse(x['orientation']);
-    }
+    // if (x.containsKey('orientation')) {
+    //   legend.orientation = LegendOrientation.parse(x['orientation']);
+    // }
     return legend;
   }
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
-      if (orientation != LegendOrientation.vertical)
-        'orientation': orientation.toString(),
+      // if (orientation != LegendOrientation.vertical)
+      //   'orientation': orientation.toString(),
     };
   }
 }

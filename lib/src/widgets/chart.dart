@@ -4,100 +4,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:graphic_lite/graphic_lite.dart';
 import 'package:graphic/graphic.dart' as g;
-
-/// CustomPainter that draws [Shape] overlays on top of the chart.
-///
-/// Coordinate systems supported via [Shape.xRef] / [Shape.yRef]:
-///   - `'x'` / `'y'`  — data coordinates (default)
-///   - `'paper'`      — normalized 0–1 across the plot area
-class _ShapesPainter extends CustomPainter {
-  _ShapesPainter({
-    required this.shapes,
-    required this.domainX,
-    required this.domainY,
-  });
-
-  final List<Shape> shapes;
-  final (num, num) domainX;
-  final (num, num) domainY;
-
-  // Must match the padding used by g.Chart in the build method.
-  static const double _leftPad = 40.0;
-  static const double _topPad = 5.0;
-  static const double _rightPad = 10.0;
-  static const double _bottomPad = 40.0;
-
-  Offset _toPixel(double dx, double dy, Size size, String xRef, String yRef) {
-    final plotW = size.width - _leftPad - _rightPad;
-    final plotH = size.height - _topPad - _bottomPad;
-
-    final px = xRef == 'paper'
-        ? _leftPad + dx * plotW
-        : _leftPad + (dx - domainX.$1) / (domainX.$2 - domainX.$1) * plotW;
-
-    // y axis: data 0 = bottom of plot, increasing upward → invert.
-    final py = yRef == 'paper'
-        ? _topPad + (1.0 - dy) * plotH
-        : _topPad +
-              (1.0 - (dy - domainY.$1) / (domainY.$2 - domainY.$1)) * plotH;
-
-    return Offset(px, py);
-  }
-
-  static Color _applyOpacity(Color c, double opacity) =>
-      c.withValues(alpha: opacity);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    // Clip all drawing to the plot area so shapes never overflow the axes.
-    final plotRect = Rect.fromLTRB(
-      _leftPad,
-      _topPad,
-      size.width - _rightPad,
-      size.height - _bottomPad,
-    );
-    canvas.save();
-    canvas.clipRect(plotRect);
-
-    for (final shape in shapes) {
-      if (shape.visibility != ShapeVisibility.visible) continue;
-
-      final p0 = _toPixel(shape.x0, shape.y0, size, shape.xRef, shape.yRef);
-      final p1 = _toPixel(shape.x1, shape.y1, size, shape.xRef, shape.yRef);
-      final opacity = shape.fillColor.a.toDouble();
-
-      final fillPaint = Paint()
-        ..color = _applyOpacity(shape.fillColor, opacity)
-        ..style = PaintingStyle.fill;
-
-      final strokePaint = Paint()
-        ..color = shape.line.color
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = shape.line.width.toDouble();
-
-      switch (shape.type) {
-        case ShapeType.rectangle:
-          final rect = Rect.fromPoints(p0, p1);
-          canvas.drawRect(rect, fillPaint);
-          if (shape.line.width > 0) canvas.drawRect(rect, strokePaint);
-        case ShapeType.circle:
-          final rect = Rect.fromPoints(p0, p1);
-          canvas.drawOval(rect, fillPaint);
-          if (shape.line.width > 0) canvas.drawOval(rect, strokePaint);
-        case ShapeType.line:
-          canvas.drawLine(p0, p1, strokePaint);
-        case ShapeType.path:
-          break; // not yet implemented
-      }
-    }
-
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(_ShapesPainter old) =>
-      old.shapes != shapes || old.domainX != domainX || old.domainY != domainY;
-}
+import 'shapes_painter.dart';
 
 class Chart extends StatefulWidget {
   Chart({super.key, required this.traces, Layout? layout})
@@ -367,7 +274,7 @@ class _ChartState extends State<Chart> {
       out['x'] = switch (traces) {
         (List<ScatterTrace<int, dynamic>> _) => g.Variable(
           accessor: (Map map) => map['x'] as int,
-          scale: xScale as g.Scale<int, num>,
+          scale: xScale as g.Scale<num, num>,
         ),
         (List<ScatterTrace<num, dynamic>> _) => g.Variable(
           accessor: (Map map) => map['x'] as num,
@@ -394,7 +301,7 @@ class _ChartState extends State<Chart> {
       out['y'] = switch (traces) {
         (List<ScatterTrace<dynamic, int>> _) => g.Variable(
           accessor: (Map map) => map['y'] as int,
-          scale: yScale as g.Scale<int, num>,
+          scale: yScale as g.Scale<num, num>,
         ),
         (List<ScatterTrace<dynamic, num>> _) => g.Variable(
           accessor: (Map map) => map['y'] as num,
@@ -556,180 +463,343 @@ class _ChartState extends State<Chart> {
     final visibilityKey =
         '${widget.traces.map((t) => t.visible.toString()).join('-')}'
         '|$_filteredDomainX|$_filteredDomainY';
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    final chartTitle = widget.layout.title?.text ?? '';
+    final xAxisTitle = widget.layout.xAxis?.title?.text ?? '';
+    final yAxisTitle = widget.layout.yAxis?.title?.text ?? '';
+    final showLegend =
+        widget.layout.showLegend && (widget.layout.legend?.visible ?? true);
+    final legendSide = widget.layout.legend?.side ?? Side.right;
+    final legendMainAxis =
+        widget.layout.legend?.mainAxisAlignment ?? MainAxisAlignment.start;
+    final legendCrossAxis =
+        widget.layout.legend?.crossAxisAlignment ?? CrossAxisAlignment.start;
+    final legendAtTop = showLegend && legendSide == Side.top;
+    final legendAtBottom = showLegend && legendSide == Side.bottom;
+    final legendAtRight = showLegend && legendSide == Side.right;
+    return Column(
+      mainAxisSize: MainAxisSize.max,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // Chart title
+        if (chartTitle.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4.0),
+            child: Text(
+              chartTitle,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+            ),
+          ),
         Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              const leftPad = 40.0;
-              const rightPad = 10.0;
-              final usableWidth = constraints.maxWidth - leftPad - rightPad;
-              return Container(
-                key: _chartKey,
-                child: Stack(
-                  children: [
-                    // shapes below the chart data
-                    if (widget.layout.shapes != null &&
-                        widget.layout.shapes!.any(
-                          (s) => s.layer == ShapeLayer.below,
-                        ))
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          child: CustomPaint(
-                            painter: _ShapesPainter(
-                              shapes: widget.layout.shapes!
-                                  .where((s) => s.layer == ShapeLayer.below)
-                                  .toList(),
-                              domainX: (_filteredDomainX ?? _domainX),
-                              domainY: (_filteredDomainY ?? _domainY),
-                            ),
-                          ),
-                        ),
-                      ),
-                    g.Chart(
-                      key: ValueKey(visibilityKey),
-                      padding: (_) => const EdgeInsets.fromLTRB(40, 5, 10, 40),
-                      data: _filteredData.isNotEmpty ? _filteredData : data,
-                      variables: variables,
-                      marks: makeMarks(widget.traces),
-                      coord: g.RectCoord(
-                        horizontalRange: [0, 1],
-                        verticalRange: [0, 1],
-                      ),
-                      axes: [
-                        g.AxisGuide(
-                          grid: g.Defaults.strokeStyle,
-                          label: g.LabelStyle(
-                            textStyle: Defaults.textStyle.copyWith(
-                              color: Colors.black,
-                            ),
-                            offset: const Offset(0, 7.5),
-                          ),
-                        ),
-                        g.AxisGuide(
-                          grid: g.Defaults.strokeStyle,
-                          label: g.LabelStyle(
-                            textStyle: Defaults.textStyle.copyWith(
-                              color: Colors.black,
-                            ),
-                            offset: const Offset(-7.5, 0),
-                          ),
-                        ),
-                      ],
-                      selections: {
-                        'tooltipMouse': g.PointSelection(
-                          on: {g.GestureType.hover},
-                          nearest: false,
-                          testRadius: 15.0,
-                          devices: {PointerDeviceKind.mouse},
-                        ),
-                      },
-                      tooltip: g.TooltipGuide(renderer: _tooltipRenderer),
-                      gestureStream: _gestureController,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Y axis title (rotated 90° counter-clockwise)
+              if (yAxisTitle.isNotEmpty)
+                RotatedBox(
+                  quarterTurns: 3,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 4.0),
+                    child: Text(
+                      yAxisTitle,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 12),
                     ),
-                    // shapes above the chart data
-                    if (widget.layout.shapes != null &&
-                        widget.layout.shapes!.any(
-                          (s) => s.layer == ShapeLayer.above,
-                        ))
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          child: CustomPaint(
-                            painter: _ShapesPainter(
-                              shapes: widget.layout.shapes!
-                                  .where((s) => s.layer == ShapeLayer.above)
-                                  .toList(),
-                              domainX: (_filteredDomainX ?? _domainX),
-                              domainY: (_filteredDomainY ?? _domainY),
-                            ),
-                          ),
+                  ),
+                ),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.max,
+                  children: [
+                    // Legend at top (horizontal, side == top)
+                    if (legendAtTop)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4.0),
+                        child: _buildLegend(
+                          horizontal: true,
+                          mainAxisAlignment: legendMainAxis,
+                          crossAxisAlignment: legendCrossAxis,
                         ),
                       ),
-                    // if there is a selection
-                    if (_currentSelectionNormalized != null)
-                      Positioned(
-                        left:
-                            leftPad +
-                            _currentSelectionNormalized![0] * usableWidth,
-                        top: 0,
-                        bottom: 0,
-                        width:
-                            (_currentSelectionNormalized![1] -
-                                _currentSelectionNormalized![0]) *
-                            usableWidth,
-                        child: IgnorePointer(
-                          child: Container(color: Colors.grey.withAlpha(64)),
+                    Expanded(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                const leftPad = 40.0;
+                                const rightPad = 10.0;
+                                final usableWidth =
+                                    constraints.maxWidth - leftPad - rightPad;
+                                return Container(
+                                  key: _chartKey,
+                                  child: Stack(
+                                    children: [
+                                      // if shapes are under the chart data
+                                      if (widget.layout.shapes != null &&
+                                          widget.layout.shapes!.any(
+                                            (s) => s.layer == ShapeLayer.below,
+                                          ))
+                                        Positioned.fill(
+                                          child: IgnorePointer(
+                                            child: CustomPaint(
+                                              painter: ShapesPainter(
+                                                shapes: widget.layout.shapes!
+                                                    .where(
+                                                      (s) =>
+                                                          s.layer ==
+                                                          ShapeLayer.below,
+                                                    )
+                                                    .toList(),
+                                                domainX:
+                                                    (_filteredDomainX ??
+                                                    _domainX),
+                                                domainY:
+                                                    (_filteredDomainY ??
+                                                    _domainY),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      g.Chart(
+                                        key: ValueKey(visibilityKey),
+                                        padding: (_) =>
+                                            const EdgeInsets.fromLTRB(
+                                              40,
+                                              5,
+                                              10,
+                                              40,
+                                            ),
+                                        data: _filteredData.isNotEmpty
+                                            ? _filteredData
+                                            : data,
+                                        variables: variables,
+                                        marks: makeMarks(widget.traces),
+                                        coord: g.RectCoord(
+                                          horizontalRange: [0, 1],
+                                          verticalRange: [0, 1],
+                                        ),
+                                        axes: [
+                                          g.AxisGuide(
+                                            grid: g.Defaults.strokeStyle,
+                                            label: g.LabelStyle(
+                                              textStyle: Defaults.textStyle
+                                                  .copyWith(
+                                                    color: Colors.black,
+                                                  ),
+                                              offset: const Offset(0, 7.5),
+                                            ),
+                                          ),
+                                          g.AxisGuide(
+                                            grid: g.Defaults.strokeStyle,
+                                            label: g.LabelStyle(
+                                              textStyle: Defaults.textStyle
+                                                  .copyWith(
+                                                    color: Colors.black,
+                                                  ),
+                                              offset: const Offset(-7.5, 0),
+                                            ),
+                                          ),
+                                        ],
+                                        selections: {
+                                          'tooltipMouse': g.PointSelection(
+                                            on: {g.GestureType.hover},
+                                            nearest: false,
+                                            testRadius: 15.0,
+                                            devices: {PointerDeviceKind.mouse},
+                                          ),
+                                        },
+                                        tooltip: g.TooltipGuide(
+                                          renderer: _tooltipRenderer,
+                                        ),
+                                        gestureStream: _gestureController,
+                                      ),
+                                      // shapes above the chart data
+                                      if (widget.layout.shapes != null &&
+                                          widget.layout.shapes!.any(
+                                            (s) => s.layer == ShapeLayer.above,
+                                          ))
+                                        Positioned.fill(
+                                          child: IgnorePointer(
+                                            child: CustomPaint(
+                                              painter: ShapesPainter(
+                                                shapes: widget.layout.shapes!
+                                                    .where(
+                                                      (s) =>
+                                                          s.layer ==
+                                                          ShapeLayer.above,
+                                                    )
+                                                    .toList(),
+                                                domainX:
+                                                    (_filteredDomainX ??
+                                                    _domainX),
+                                                domainY:
+                                                    (_filteredDomainY ??
+                                                    _domainY),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      // if there is a selection
+                                      if (_currentSelectionNormalized != null)
+                                        Positioned(
+                                          left:
+                                              leftPad +
+                                              _currentSelectionNormalized![0] *
+                                                  usableWidth,
+                                          top: 0,
+                                          bottom: 0,
+                                          width:
+                                              (_currentSelectionNormalized![1] -
+                                                  _currentSelectionNormalized![0]) *
+                                              usableWidth,
+                                          child: IgnorePointer(
+                                            child: Container(
+                                              color: Colors.grey.withAlpha(64),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                          // Right-side legend (side == right)
+                          if (legendAtRight)
+                            IntrinsicWidth(
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 8.0),
+                                child: _buildLegend(
+                                  horizontal: false,
+                                  mainAxisAlignment: legendMainAxis,
+                                  crossAxisAlignment: legendCrossAxis,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ), // Expanded(chart Row)
+                    if (xAxisTitle.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4.0),
+                        child: Text(
+                          xAxisTitle,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    // Legend at bottom (horizontal, side == bottom)
+                    if (legendAtBottom)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4.0),
+                        child: _buildLegend(
+                          horizontal: true,
+                          mainAxisAlignment: legendMainAxis,
+                          crossAxisAlignment: legendCrossAxis,
                         ),
                       ),
                   ],
                 ),
-              );
-            },
+              ),
+            ],
           ),
-        ),
-        SizedBox(width: 100, child: _buildLegend()),
+        ), // Expanded(outer Row)
       ],
     );
   }
 
-  Widget _buildLegend() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: List.generate(widget.traces.length, (i) {
-        final trace = widget.traces[i];
-        final label = trace.name ?? 'trace $i';
-        final mode = trace.mode;
-        final isVisible = trace.visible == TraceVisibility.on;
-        final color = isVisible ? Defaults.colors[i] : Colors.grey.shade400;
-        return MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: GestureDetector(
-            onTap: () => setState(() {
-              trace.visible = isVisible
-                  ? TraceVisibility.off
-                  : TraceVisibility.on;
-            }),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 3.0),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    width: 40,
-                    height: 14,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        if (mode.contains('lines'))
-                          Container(height: 2, color: color),
-                        if (mode.contains('markers'))
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              color: color,
-                              shape: BoxShape.circle,
-                            ),
+  Widget _buildLegend({
+    bool horizontal = false,
+    MainAxisAlignment mainAxisAlignment = MainAxisAlignment.start,
+    CrossAxisAlignment crossAxisAlignment = CrossAxisAlignment.start,
+  }) {
+    final items = List.generate(widget.traces.length, (i) {
+      final trace = widget.traces[i];
+      final label = trace.name ?? 'trace $i';
+      final mode = trace.mode;
+      final isVisible = trace.visible == TraceVisibility.on;
+      final color = isVisible ? Defaults.colors[i] : Colors.grey.shade400;
+      return MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: () => setState(() {
+            trace.visible = isVisible
+                ? TraceVisibility.off
+                : TraceVisibility.on;
+          }),
+          child: Padding(
+            padding: horizontal
+                ? const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0)
+                : const EdgeInsets.symmetric(vertical: 3.0),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 40,
+                  height: 14,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      if (mode.contains('lines'))
+                        Container(height: 2, color: color),
+                      if (mode.contains('markers'))
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: color,
+                            shape: BoxShape.circle,
                           ),
-                      ],
-                    ),
+                        ),
+                    ],
                   ),
-                  const SizedBox(width: 6),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isVisible ? Colors.black : Colors.grey,
-                    ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isVisible ? Colors.black : Colors.grey,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
-        ); // MouseRegion
-      }),
+        ),
+      );
+    });
+
+    if (horizontal) {
+      return SizedBox(
+        width: double.infinity,
+        child: Wrap(
+          direction: Axis.horizontal,
+          alignment: switch (mainAxisAlignment) {
+            MainAxisAlignment.center => WrapAlignment.center,
+            MainAxisAlignment.end => WrapAlignment.end,
+            MainAxisAlignment.spaceBetween => WrapAlignment.spaceBetween,
+            MainAxisAlignment.spaceAround => WrapAlignment.spaceAround,
+            MainAxisAlignment.spaceEvenly => WrapAlignment.spaceEvenly,
+            _ => WrapAlignment.start,
+          },
+          crossAxisAlignment: switch (crossAxisAlignment) {
+            CrossAxisAlignment.center => WrapCrossAlignment.center,
+            CrossAxisAlignment.end => WrapCrossAlignment.end,
+            _ => WrapCrossAlignment.start,
+          },
+          spacing: 8.0,
+          runSpacing: 2.0,
+          children: items,
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: crossAxisAlignment,
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: mainAxisAlignment,
+      children: items,
     );
   }
 }
