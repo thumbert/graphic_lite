@@ -3,6 +3,7 @@ import 'package:graphic_lite/src/display/marker.dart';
 import 'enums.dart';
 import 'layout.dart';
 import 'legend.dart';
+import 'line.dart';
 import 'text_position.dart';
 
 class ScatterTrace<D, R> {
@@ -14,6 +15,7 @@ class ScatterTrace<D, R> {
     this.text,
     String? mode,
     List<Marker>? marker,
+    Line? line,
   }) {
     assert(x.length == y.length);
     this.mode = mode ?? defaultMode;
@@ -27,6 +29,11 @@ class ScatterTrace<D, R> {
     } else {
       this.marker = null;
     }
+    if (this.mode.contains('lines')) {
+      this.line = line ?? Line();
+    } else {
+      this.line = null;
+    }
   }
   List<D> x;
   List<R> y;
@@ -38,6 +45,9 @@ class ScatterTrace<D, R> {
   /// the value applies to all elements of the trace. See `Marker` for
   /// more details.
   late List<Marker>? marker;
+  
+  /// Sets the line for the trace. See `Line` for more details.
+  late Line? line;
 
   /// Any combination of "lines", "markers", "text" joined with a "+".
   /// Examples: "lines", "markers", "lines+markers", "lines+markers+text".

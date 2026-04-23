@@ -10,7 +10,7 @@ export 'src/display/shape.dart';
 export 'src/display/text_position.dart';
 export 'src/display/tick.dart';
 export 'src/display/title.dart';
-export 'src/display/trace.dart';
+export 'src/display/trace_scatter.dart';
 export 'src/display/x_axis.dart';
 export 'src/display/y_axis.dart';
 

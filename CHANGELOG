@@ -1,5 +1,12 @@
 
-TODO: Implement: title and axis labels
+TODO: 
+- Implement showLegend in ScatterTrace.
+
+# 2026-04-22 
+- X Axis label is now centered relative to the chart area.  
+- Implemented the line argument for a ScatterTrace.  This allows lines with 
+  various shapes: spline, hv.  Still need to implement vh.  A line can have 
+  various dash types.  These dash types show correctly in the legend. 
 
 # 2026-04-20 (version 0.0.3)
 - Implemented title and axis labels

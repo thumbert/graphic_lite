@@ -6,6 +6,52 @@ import 'package:graphic_lite/graphic_lite.dart';
 import 'package:graphic/graphic.dart' as g;
 import 'shapes_painter.dart';
 
+/// A [CustomPainter] that draws a dashed/dotted line for the legend swatch.
+class _LegendLinePainter extends CustomPainter {
+  const _LegendLinePainter({
+    required this.color,
+    required this.strokeWidth,
+    this.dash,
+  });
+
+  final Color color;
+  final double strokeWidth;
+  final List<double>? dash;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    final y = size.height / 2;
+    final dashList = dash;
+    if (dashList == null || dashList.isEmpty) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+      return;
+    }
+    double x = 0;
+    int di = 0;
+    bool drawing = true;
+    while (x < size.width) {
+      final len = dashList[di % dashList.length];
+      final end = (x + len).clamp(0.0, size.width);
+      if (drawing) {
+        canvas.drawLine(Offset(x, y), Offset(end, y), paint);
+      }
+      x = end;
+      di++;
+      drawing = !drawing;
+    }
+  }
+
+  @override
+  bool shouldRepaint(_LegendLinePainter old) =>
+      color != old.color || strokeWidth != old.strokeWidth || dash != old.dash;
+}
+
 class Chart extends StatefulWidget {
   Chart({super.key, required this.traces, Layout? layout})
     : layout = layout ?? Layout.getDefault();
@@ -395,6 +441,35 @@ class _ChartState extends State<Chart> {
     ];
   }
 
+  /// Returns the [g.BasicLineShape] corresponding to the [LineShape] and [Dash]
+  /// of the trace with the given [name].
+  g.BasicLineShape _lineShapeFor(String name, List<ScatterTrace> traces) {
+    for (var i = 0; i < traces.length; i++) {
+      final trace = traces[i];
+      if ((trace.name ?? 'trace $i') == name && trace.mode.contains('lines')) {
+        final ls = trace.line?.shape ?? LineShape.linear;
+        final dash = _dashPattern(trace.line?.dash ?? Dash.solid);
+        return switch (ls) {
+          LineShape.spline => g.BasicLineShape(smooth: true, dash: dash),
+          LineShape.hv ||
+          LineShape.vh => g.BasicLineShape(stepped: true, dash: dash),
+          _ => g.BasicLineShape(dash: dash),
+        };
+      }
+    }
+    return g.BasicLineShape();
+  }
+
+  /// Converts a [Dash] enum value to a dash-pattern list for [g.BasicLineShape].
+  List<double>? _dashPattern(Dash dash) => switch (dash) {
+    Dash.solid => null,
+    Dash.dashed => [6, 4],
+    Dash.dotted => [2, 4],
+    Dash.longDash => [12, 4],
+    Dash.dashDot => [6, 4, 2, 4],
+    Dash.longDashDot => [12, 4, 2, 4],
+  };
+
   /// Check the mode of each trace and return the appropriate marks.
   /// The `mode` can be null.
   ///
@@ -402,6 +477,20 @@ class _ChartState extends State<Chart> {
     return [
       g.LineMark(
         position: g.Varset('x') * g.Varset('y') / g.Varset('name'),
+        shape: g.ShapeEncode(
+          encoder: (e) => _lineShapeFor(e['name'] as String, traces),
+        ),
+        size: g.SizeEncode(
+          encoder: (e) {
+            for (var i = 0; i < traces.length; i++) {
+              final trace = traces[i];
+              if ((trace.name ?? 'trace $i') == e['name']) {
+                return (trace.line?.width ?? 2.0).toDouble();
+              }
+            }
+            return 2.0;
+          },
+        ),
         color: g.ColorEncode(
           encoder: (e) {
             for (var i = 0; i < traces.length; i++) {
@@ -480,16 +569,6 @@ class _ChartState extends State<Chart> {
       mainAxisSize: MainAxisSize.max,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Chart title
-        if (chartTitle.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4.0),
-            child: Text(
-              chartTitle,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-            ),
-          ),
         Expanded(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -511,6 +590,19 @@ class _ChartState extends State<Chart> {
                 child: Column(
                   mainAxisSize: MainAxisSize.max,
                   children: [
+                    // Chart title
+                    if (chartTitle.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4.0),
+                        child: Text(
+                          chartTitle,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
                     // Legend at top (horizontal, side == top)
                     if (legendAtTop)
                       Padding(
@@ -526,151 +618,194 @@ class _ChartState extends State<Chart> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Expanded(
-                            child: LayoutBuilder(
-                              builder: (context, constraints) {
-                                const leftPad = 40.0;
-                                const rightPad = 10.0;
-                                final usableWidth =
-                                    constraints.maxWidth - leftPad - rightPad;
-                                return Container(
-                                  key: _chartKey,
-                                  child: Stack(
-                                    children: [
-                                      // if shapes are under the chart data
-                                      if (widget.layout.shapes != null &&
-                                          widget.layout.shapes!.any(
-                                            (s) => s.layer == ShapeLayer.below,
-                                          ))
-                                        Positioned.fill(
-                                          child: IgnorePointer(
-                                            child: CustomPaint(
-                                              painter: ShapesPainter(
-                                                shapes: widget.layout.shapes!
-                                                    .where(
-                                                      (s) =>
-                                                          s.layer ==
-                                                          ShapeLayer.below,
-                                                    )
-                                                    .toList(),
-                                                domainX:
-                                                    (_filteredDomainX ??
-                                                    _domainX),
-                                                domainY:
-                                                    (_filteredDomainY ??
-                                                    _domainY),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      g.Chart(
-                                        key: ValueKey(visibilityKey),
-                                        padding: (_) =>
-                                            const EdgeInsets.fromLTRB(
-                                              40,
-                                              5,
-                                              10,
-                                              40,
-                                            ),
-                                        data: _filteredData.isNotEmpty
-                                            ? _filteredData
-                                            : data,
-                                        variables: variables,
-                                        marks: makeMarks(widget.traces),
-                                        coord: g.RectCoord(
-                                          horizontalRange: [0, 1],
-                                          verticalRange: [0, 1],
-                                        ),
-                                        axes: [
-                                          g.AxisGuide(
-                                            grid: g.Defaults.strokeStyle,
-                                            label: g.LabelStyle(
-                                              textStyle: Defaults.textStyle
-                                                  .copyWith(
-                                                    color: Colors.black,
+                            child: Column(
+                              children: [
+                                Expanded(
+                                  child: LayoutBuilder(
+                                    builder: (context, constraints) {
+                                      const leftPad = 40.0;
+                                      const rightPad = 10.0;
+                                      final usableWidth =
+                                          constraints.maxWidth -
+                                          leftPad -
+                                          rightPad;
+                                      return Container(
+                                        key: _chartKey,
+                                        child: Stack(
+                                          children: [
+                                            // if shapes are under the chart data
+                                            if (widget.layout.shapes != null &&
+                                                widget.layout.shapes!.any(
+                                                  (s) =>
+                                                      s.layer ==
+                                                      ShapeLayer.below,
+                                                ))
+                                              Positioned.fill(
+                                                child: IgnorePointer(
+                                                  child: CustomPaint(
+                                                    painter: ShapesPainter(
+                                                      shapes: widget
+                                                          .layout
+                                                          .shapes!
+                                                          .where(
+                                                            (s) =>
+                                                                s.layer ==
+                                                                ShapeLayer
+                                                                    .below,
+                                                          )
+                                                          .toList(),
+                                                      domainX:
+                                                          (_filteredDomainX ??
+                                                          _domainX),
+                                                      domainY:
+                                                          (_filteredDomainY ??
+                                                          _domainY),
+                                                    ),
                                                   ),
-                                              offset: const Offset(0, 7.5),
-                                            ),
-                                          ),
-                                          g.AxisGuide(
-                                            grid: g.Defaults.strokeStyle,
-                                            label: g.LabelStyle(
-                                              textStyle: Defaults.textStyle
-                                                  .copyWith(
-                                                    color: Colors.black,
-                                                  ),
-                                              offset: const Offset(-7.5, 0),
-                                            ),
-                                          ),
-                                        ],
-                                        selections: {
-                                          'tooltipMouse': g.PointSelection(
-                                            on: {g.GestureType.hover},
-                                            nearest: false,
-                                            testRadius: 15.0,
-                                            devices: {PointerDeviceKind.mouse},
-                                          ),
-                                        },
-                                        tooltip: g.TooltipGuide(
-                                          renderer: _tooltipRenderer,
-                                        ),
-                                        gestureStream: _gestureController,
-                                      ),
-                                      // shapes above the chart data
-                                      if (widget.layout.shapes != null &&
-                                          widget.layout.shapes!.any(
-                                            (s) => s.layer == ShapeLayer.above,
-                                          ))
-                                        Positioned.fill(
-                                          child: IgnorePointer(
-                                            child: CustomPaint(
-                                              painter: ShapesPainter(
-                                                shapes: widget.layout.shapes!
-                                                    .where(
-                                                      (s) =>
-                                                          s.layer ==
-                                                          ShapeLayer.above,
-                                                    )
-                                                    .toList(),
-                                                domainX:
-                                                    (_filteredDomainX ??
-                                                    _domainX),
-                                                domainY:
-                                                    (_filteredDomainY ??
-                                                    _domainY),
+                                                ),
                                               ),
+                                            g.Chart(
+                                              key: ValueKey(visibilityKey),
+                                              padding: (_) =>
+                                                  const EdgeInsets.fromLTRB(
+                                                    40,
+                                                    5,
+                                                    10,
+                                                    40,
+                                                  ),
+                                              data: _filteredData.isNotEmpty
+                                                  ? _filteredData
+                                                  : data,
+                                              variables: variables,
+                                              marks: makeMarks(widget.traces),
+                                              coord: g.RectCoord(
+                                                horizontalRange: [0, 1],
+                                                verticalRange: [0, 1],
+                                              ),
+                                              axes: [
+                                                g.AxisGuide(
+                                                  grid: g.Defaults.strokeStyle,
+                                                  label: g.LabelStyle(
+                                                    textStyle: Defaults
+                                                        .textStyle
+                                                        .copyWith(
+                                                          color: Colors.black,
+                                                        ),
+                                                    offset: const Offset(
+                                                      0,
+                                                      7.5,
+                                                    ),
+                                                  ),
+                                                ),
+                                                g.AxisGuide(
+                                                  grid: g.Defaults.strokeStyle,
+                                                  label: g.LabelStyle(
+                                                    textStyle: Defaults
+                                                        .textStyle
+                                                        .copyWith(
+                                                          color: Colors.black,
+                                                        ),
+                                                    offset: const Offset(
+                                                      -7.5,
+                                                      0,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                              selections: {
+                                                'tooltipMouse':
+                                                    g.PointSelection(
+                                                      on: {g.GestureType.hover},
+                                                      nearest: false,
+                                                      testRadius: 15.0,
+                                                      devices: {
+                                                        PointerDeviceKind.mouse,
+                                                      },
+                                                    ),
+                                              },
+                                              tooltip: g.TooltipGuide(
+                                                renderer: _tooltipRenderer,
+                                              ),
+                                              gestureStream: _gestureController,
                                             ),
-                                          ),
+                                            // shapes above the chart data
+                                            if (widget.layout.shapes != null &&
+                                                widget.layout.shapes!.any(
+                                                  (s) =>
+                                                      s.layer ==
+                                                      ShapeLayer.above,
+                                                ))
+                                              Positioned.fill(
+                                                child: IgnorePointer(
+                                                  child: CustomPaint(
+                                                    painter: ShapesPainter(
+                                                      shapes: widget
+                                                          .layout
+                                                          .shapes!
+                                                          .where(
+                                                            (s) =>
+                                                                s.layer ==
+                                                                ShapeLayer
+                                                                    .above,
+                                                          )
+                                                          .toList(),
+                                                      domainX:
+                                                          (_filteredDomainX ??
+                                                          _domainX),
+                                                      domainY:
+                                                          (_filteredDomainY ??
+                                                          _domainY),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            // if there is a selection
+                                            if (_currentSelectionNormalized !=
+                                                null)
+                                              Positioned(
+                                                left:
+                                                    leftPad +
+                                                    _currentSelectionNormalized![0] *
+                                                        usableWidth,
+                                                top: 0,
+                                                bottom: 0,
+                                                width:
+                                                    (_currentSelectionNormalized![1] -
+                                                        _currentSelectionNormalized![0]) *
+                                                    usableWidth,
+                                                child: IgnorePointer(
+                                                  child: Container(
+                                                    color: Colors.grey
+                                                        .withAlpha(64),
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
                                         ),
-                                      // if there is a selection
-                                      if (_currentSelectionNormalized != null)
-                                        Positioned(
-                                          left:
-                                              leftPad +
-                                              _currentSelectionNormalized![0] *
-                                                  usableWidth,
-                                          top: 0,
-                                          bottom: 0,
-                                          width:
-                                              (_currentSelectionNormalized![1] -
-                                                  _currentSelectionNormalized![0]) *
-                                              usableWidth,
-                                          child: IgnorePointer(
-                                            child: Container(
-                                              color: Colors.grey.withAlpha(64),
-                                            ),
-                                          ),
-                                        ),
-                                    ],
+                                      );
+                                    },
                                   ),
-                                );
-                              },
+                                ),
+                                if (xAxisTitle.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 4.0),
+                                    child: Text(
+                                      xAxisTitle,
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                  ),
+                              ],
                             ),
-                          ),
+                          ), // Expanded(Column with chart + x-axis title)
                           // Right-side legend (side == right)
                           if (legendAtRight)
                             IntrinsicWidth(
                               child: Padding(
-                                padding: const EdgeInsets.only(left: 8.0),
+                                padding: const EdgeInsets.only(
+                                  left: 8.0,
+                                  top: 8.0,
+                                ),
                                 child: _buildLegend(
                                   horizontal: false,
                                   mainAxisAlignment: legendMainAxis,
@@ -681,15 +816,6 @@ class _ChartState extends State<Chart> {
                         ],
                       ),
                     ), // Expanded(chart Row)
-                    if (xAxisTitle.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4.0),
-                        child: Text(
-                          xAxisTitle,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                      ),
                     // Legend at bottom (horizontal, side == bottom)
                     if (legendAtBottom)
                       Padding(
@@ -743,7 +869,14 @@ class _ChartState extends State<Chart> {
                     alignment: Alignment.center,
                     children: [
                       if (mode.contains('lines'))
-                        Container(height: 2, color: color),
+                        CustomPaint(
+                          size: const Size(40, 2),
+                          painter: _LegendLinePainter(
+                            color: color,
+                            strokeWidth: (trace.line?.width ?? 2.0).toDouble(),
+                            dash: _dashPattern(trace.line?.dash ?? Dash.solid),
+                          ),
+                        ),
                       if (mode.contains('markers'))
                         Container(
                           width: 8,

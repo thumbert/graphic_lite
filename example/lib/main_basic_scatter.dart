@@ -62,6 +62,7 @@ Chart simple() {
     ScatterTrace(
       x: [2, 3, 4, 5],
       y: [16, 5, 11, 9],
+      line: Line(dash: .dotted),
       mode: 'lines',
       name: 'Line',
     ),
@@ -76,8 +77,7 @@ Chart simple() {
     title: Title('Simple Scatter Plot'),
     xAxis: XAxis(title: Title('X Axis')),
     yAxis: YAxis(title: Title('Y Axis')),
-    legend: Legend(side: .bottom, mainAxisAlignment: .start),
-    // legend: Legend(side: .right, mainAxisAlignment: .center),
+    legend: Legend(side: .right),
   );
   return Chart(traces: traces, layout: layout);
 }
