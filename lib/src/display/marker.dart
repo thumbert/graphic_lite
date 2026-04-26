@@ -1,5 +1,7 @@
 import 'dart:math';
 
+import 'package:flutter/material.dart';
+
 import 'enums.dart';
 
 class Marker {
@@ -63,7 +65,9 @@ class Marker {
   /// Sets the marker color. It accepts either a specific color or an array of
   /// numbers that are mapped to the colorscale relative to the max and min
   /// values of the array or relative to `marker.cmin` and `marker.cmax` if set.
-  Object? color;
+  /// 
+  /// Decided not to support the array of colors at this time!  2026-04-26 
+  Color? color;
 
   /// Sets a reference to a shared color axis. References to these shared color
   /// axes are "coloraxis", "coloraxis2", "coloraxis3", etc. Settings for these

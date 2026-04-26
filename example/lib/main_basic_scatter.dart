@@ -41,9 +41,11 @@ class LineAndScatterCharts extends State<MyHomePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Expanded(child: simple()),
+            // Expanded(child: simple()),
             // const SizedBox(height: 32),
             // Expanded(child: dataLabelsOnHover()),
+            // const SizedBox(height: 32),
+            Expanded(child: areaChart()),
           ],
         ),
       ),
@@ -62,8 +64,8 @@ Chart simple() {
     ScatterTrace(
       x: [2, 3, 4, 5],
       y: [16, 5, 11, 9],
-      line: Line(dash: .dotted),
       mode: 'lines',
+      line: Line(dash: .dotted),
       name: 'Line',
     ),
     ScatterTrace(
@@ -77,7 +79,6 @@ Chart simple() {
     title: Title('Simple Scatter Plot'),
     xAxis: XAxis(title: Title('X Axis')),
     yAxis: YAxis(title: Title('Y Axis')),
-    legend: Legend(side: .right),
   );
   return Chart(traces: traces, layout: layout);
 }
@@ -120,4 +121,23 @@ Chart dataLabelsOnHover() {
     ],
   );
   return Chart(traces: traces, layout: layout);
+}
+
+/// See https://plotly.com/javascript/filled-area-plots/
+Chart areaChart() {
+  final traces = [
+    ScatterTrace(
+      x: [1, 2, 3, 4],
+      y: [0, 2, 3, 5],
+      fill: Fill.toZeroY,
+      mode: 'none',
+    ),
+    ScatterTrace(
+      x: [1, 2, 3, 4],
+      y: [3, 5, 1, 7],
+      fill: Fill.toNextY,
+      mode: 'none',
+    ),
+  ];
+  return Chart(traces: traces);
 }

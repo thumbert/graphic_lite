@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:graphic_lite/src/display/marker.dart';
 
 import 'enums.dart';
@@ -16,6 +18,8 @@ class ScatterTrace<D, R> {
     String? mode,
     List<Marker>? marker,
     Line? line,
+    this.showLegend = true,
+    this.fill = Fill.none,
   }) {
     assert(x.length == y.length);
     this.mode = mode ?? defaultMode;
@@ -45,7 +49,7 @@ class ScatterTrace<D, R> {
   /// the value applies to all elements of the trace. See `Marker` for
   /// more details.
   late List<Marker>? marker;
-  
+
   /// Sets the line for the trace. See `Line` for more details.
   late Line? line;
 
@@ -69,8 +73,32 @@ class ScatterTrace<D, R> {
 
   TraceVisibility visible = TraceVisibility.on;
 
+  /// Sets the area to fill with a solid color. Defaults to "none" unless this
+  /// trace is stacked, then it gets "tonexty" ("tonextx") if `orientation` is
+  /// "v" ("h") Use with `fillcolor` if not "none". "tozerox" and "tozeroy" fill
+  /// to x=0 and y=0 respectively. "tonextx" and "tonexty" fill between the
+  /// endpoints of this trace and the endpoints of the trace before it,
+  /// connecting those endpoints with straight lines (to make a stacked area
+  /// graph); if there is no trace before it, they behave like "tozerox" and
+  /// "tozeroy". "toself" connects the endpoints of the trace (or each segment
+  /// of the trace if it has gaps) into a closed shape. "tonext" fills the space
+  /// between two traces if one completely encloses the other (eg consecutive
+  /// contour lines), and behaves like "toself" if there is no trace before it.
+  /// "tonext" should not be used if one trace does not enclose the other.
+  /// Traces in a `stackgroup` will only fill to (or be filled to) other traces
+  /// in the same group. With multiple `stackgroup`s or some traces stacked and
+  /// some not, if fill-linked traces are not already consecutive, the later
+  /// ones will be pushed down in the drawing order.
+  Fill fill;
+
+  /// Sets the fill color. Defaults to a half-transparent variant of the line 
+  /// color, marker color, or marker line color, whichever is available. If 
+  /// fillgradient is specified, fillcolor is ignored except for setting the 
+  /// background color of the hover label, if any.
+  Color? fillColor;
+
   /// The opacity of this trace.
-  num opacity = 1;
+  // num opacity = 1;
 
   /// Assigns id labels to each datum. These ids for object constancy of data
   /// points during animation. Should be an array of strings, not numbers or
@@ -79,7 +107,7 @@ class ScatterTrace<D, R> {
 
   /// Determines whether or not an item corresponding to this trace is shown in
   /// the legend.
-  bool showLegend = true;
+  bool showLegend;
 
   String legend = 'legend';
   int legendRank = 1000;
@@ -427,7 +455,6 @@ class ScatterTrace<D, R> {
       if (legend != 'legend') 'legend': legend,
       if (legendRank != 1000) 'legendrank': legendRank,
       if (legendGroup != '') 'legendgroup': legendGroup,
-      if (opacity != 1) 'opacity': opacity,
       'mode': mode,
       if (ids != null) 'ids': ids,
       if (x0 != 0) 'x0': x0,

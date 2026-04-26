@@ -62,7 +62,7 @@ enum AutoRange {
 }
 
 enum AxisType {
-  // If "inferred", the axis type is automatically detected based on the input 
+  // If "inferred", the axis type is automatically detected based on the input
   // data.
   inferred,
   linear,
@@ -81,7 +81,6 @@ enum AxisType {
     };
   }
 }
-
 
 /// Determines a formatting rule for the tick exponents. For example, consider
 /// the number 1,000,000,000. If "none", it appears as 1,000,000,000. If "e",
@@ -107,6 +106,29 @@ enum ExponentFormat {
       'SI' => ExponentFormat.internationalSystemOfUnits,
       'B' => ExponentFormat.B,
       _ => throw ArgumentError('Invalid value $value for PlotlyExponentFormat'),
+    };
+  }
+
+  @override
+  String toString() => _value;
+}
+
+enum Fill {
+  none('none'),
+  toZeroY('tozeroy'),
+  toNextY('tonexty'),
+  toSelf('toself');
+
+  const Fill(this._value);
+  final String _value;
+
+  static Fill parse(String value) {
+    return switch (value) {
+      'none' => Fill.none,
+      'tozeroy' => Fill.toZeroY,
+      'tonexty' => Fill.toNextY,
+      'toself' => Fill.toSelf,
+      _ => throw ArgumentError('Invalid value $value for Fill enum'),
     };
   }
 
@@ -168,8 +190,7 @@ enum RangeMode {
   }
 }
 
-
-/// Determines whether a x (y) axis is positioned at the "bottom" ("left") or 
+/// Determines whether a x (y) axis is positioned at the "bottom" ("left") or
 /// "top" ("right") of the plotting area.
 enum Side {
   bottom,
@@ -187,7 +208,6 @@ enum Side {
     };
   }
 }
-
 
 enum ShowExponent {
   all,
