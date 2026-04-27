@@ -45,7 +45,8 @@ class LineAndScatterCharts extends State<MyHomePage> {
             // const SizedBox(height: 32),
             // Expanded(child: dataLabelsOnHover()),
             // const SizedBox(height: 32),
-            Expanded(child: areaChart()),
+            // Expanded(child: areaChart()),
+            Expanded(child: barChart()),
           ],
         ),
       ),
@@ -126,18 +127,15 @@ Chart dataLabelsOnHover() {
 /// See https://plotly.com/javascript/filled-area-plots/
 Chart areaChart() {
   final traces = [
-    ScatterTrace(
-      x: [1, 2, 3, 4],
-      y: [0, 2, 3, 5],
-      fill: Fill.toZeroY,
-      mode: 'none',
-    ),
-    ScatterTrace(
-      x: [1, 2, 3, 4],
-      y: [3, 5, 1, 7],
-      fill: Fill.toNextY,
-      mode: 'none',
-    ),
+    ScatterTrace(x: [1, 2, 3, 4], y: [0, 2, 3, 5], fill: Fill.toZeroY),
+    ScatterTrace(x: [1, 2, 3, 4], y: [3, 5, 1, 7], fill: Fill.toNextY),
+  ];
+  return Chart(traces: traces);
+}
+
+Chart barChart() {
+  final traces = [
+    BarTrace(x: ['giraffes', 'orangutans', 'monkeys'], y: [20, 14, 23]),
   ];
   return Chart(traces: traces);
 }

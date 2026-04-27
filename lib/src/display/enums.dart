@@ -225,3 +225,24 @@ enum ShowExponent {
     };
   }
 }
+
+enum TraceVisibility {
+  on('true'),
+  off('false'),
+  legendOnly('legendonly');
+
+  const TraceVisibility(this._value);
+  final String _value;
+
+  static TraceVisibility parse(String value) {
+    return switch (value) {
+      'true' => on,
+      'false' => off,
+      'legendonly' => legendOnly,
+      _ => throw ArgumentError('Can\'t parse $value as a TraceVisibility'),
+    };
+  }
+
+  @override
+  String toString() => _value;
+}

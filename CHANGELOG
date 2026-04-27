@@ -5,7 +5,9 @@ TODO:
 - Implemented the showLegend argument in ScatterTrace.
 - Implemented the shape = LineShape.vh for the line argument of 
   a ScatterTrace.  This was missing from the graphics package 2.7.0.
-- Implemented area plots, e.g. the fill argument for scatter traces   
+- Implemented area plots, e.g. the fill argument for scatter traces
+- First implementation of BarTraces.  Required creation of an abstract 
+  class Trace.  Promising.   
 
 # 2026-04-22 
 - X Axis label is now centered relative to the chart area.  

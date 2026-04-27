@@ -1,113 +1,37 @@
-import 'dart:ui';
-
 import 'package:graphic_lite/src/display/marker.dart';
+import 'package:graphic_lite/src/display/traces/trace.dart';
 
-import 'enums.dart';
-import 'layout.dart';
-import 'legend.dart';
-import 'line.dart';
-import 'text_position.dart';
+import '../enums.dart';
+import '../layout.dart';
+import '../legend.dart';
+import '../text_position.dart';
 
-class ScatterTrace<D, R> {
-  /// See https://plotly.com/javascript/reference/scatter/
-  ScatterTrace({
-    required this.x,
-    required this.y,
-    this.name,
-    this.text,
-    String? mode,
-    List<Marker>? marker,
-    Line? line,
-    this.showLegend = true,
-    this.fill = Fill.none,
+class BarTrace<D, R> extends Trace<D, R> {
+  /// See https://plotly.com/javascript/reference/bar/
+  BarTrace({
+    required List<D> x,
+    required List<R> y,
+    String? name,
+    List<String>? text,
+    this.marker,
+    bool showLegend = true,
   }) {
+    this.x = x;
+    this.y = y;
+    this.name = name;
+    this.text = text;
+    this.showLegend = showLegend;
     assert(x.length == y.length);
-    this.mode = mode ?? defaultMode;
-    if (this.mode.contains('markers')) {
-      if (marker != null) {
-        assert(marker.length == 1 || marker.length == x.length);
-      } else {
-        marker = [Marker(size: 6.0)];
-      }
-      this.marker = marker;
-    } else {
-      this.marker = null;
-    }
-    if (this.mode.contains('lines')) {
-      this.line = line ?? Line();
-    } else {
-      this.line = null;
-    }
-  }
-  List<D> x;
-  List<R> y;
-
-  /// Name of the trace, shown in the legend and on hover.
-  String? name;
-
-  /// Sets the marker for the trace.  A list with only one element means that
-  /// the value applies to all elements of the trace. See `Marker` for
-  /// more details.
-  late List<Marker>? marker;
-
-  /// Sets the line for the trace. See `Line` for more details.
-  late Line? line;
-
-  /// Any combination of "lines", "markers", "text" joined with a "+".
-  /// Examples: "lines", "markers", "lines+markers", "lines+markers+text".
-  /// Determines the drawing mode for this scatter trace. If the provided `mode`
-  /// includes "text" then the `text` elements appear at the coordinates.
-  /// Otherwise, the `text` elements appear on hover.
-  late final String mode;
-
-  /// If there are less than 20 points and the trace is not stacked then the
-  /// default is "lines+markers".  Otherwise, "lines".
-  String get defaultMode {
-    if (y.length < 20) return 'lines+markers';
-    return 'lines';
   }
 
-  /// A list with only one element means that the value applies to all
-  /// elements of the trace.
-  List<String>? text;
+  /// Sets the marker for each bar. A list with only one element means that the
+  /// value applies to all bars of the trace. See [Marker] for more details.
+  List<Marker>? marker;
 
-  TraceVisibility visible = TraceVisibility.on;
-
-  /// Sets the area to fill with a solid color. Defaults to "none" unless this
-  /// trace is stacked, then it gets "tonexty" ("tonextx") if `orientation` is
-  /// "v" ("h") Use with `fillcolor` if not "none". "tozerox" and "tozeroy" fill
-  /// to x=0 and y=0 respectively. "tonextx" and "tonexty" fill between the
-  /// endpoints of this trace and the endpoints of the trace before it,
-  /// connecting those endpoints with straight lines (to make a stacked area
-  /// graph); if there is no trace before it, they behave like "tozerox" and
-  /// "tozeroy". "toself" connects the endpoints of the trace (or each segment
-  /// of the trace if it has gaps) into a closed shape. "tonext" fills the space
-  /// between two traces if one completely encloses the other (eg consecutive
-  /// contour lines), and behaves like "toself" if there is no trace before it.
-  /// "tonext" should not be used if one trace does not enclose the other.
-  /// Traces in a `stackgroup` will only fill to (or be filled to) other traces
-  /// in the same group. With multiple `stackgroup`s or some traces stacked and
-  /// some not, if fill-linked traces are not already consecutive, the later
-  /// ones will be pushed down in the drawing order.
-  Fill fill;
-
-  /// Sets the fill color. Defaults to a half-transparent variant of the line 
-  /// color, marker color, or marker line color, whichever is available. If 
-  /// fillgradient is specified, fillcolor is ignored except for setting the 
-  /// background color of the hover label, if any.
-  Color? fillColor;
-
-  /// The opacity of this trace.
-  // num opacity = 1;
-
-  /// Assigns id labels to each datum. These ids for object constancy of data
-  /// points during animation. Should be an array of strings, not numbers or
-  /// any other type.
-  List<String>? ids;
-
-  /// Determines whether or not an item corresponding to this trace is shown in
-  /// the legend.
-  bool showLegend;
+  /// Sets where the bar base is drawn (in position axis units). In "stack" or
+  /// "relative" barmode, traces that set "base" will be excluded and drawn in
+  /// "overlay" mode instead.
+  List<num>? base;
 
   String legend = 'legend';
   int legendRank = 1000;
@@ -448,15 +372,13 @@ class ScatterTrace<D, R> {
     return <String, dynamic>{
       'x': x,
       'y': y,
-      'type': 'scatter',
+      'type': 'bar',
       if (name != null) 'name': name,
       if (visible != TraceVisibility.on) 'visibility': visible.toString(),
       if (!showLegend) 'showlegend': showLegend,
       if (legend != 'legend') 'legend': legend,
       if (legendRank != 1000) 'legendrank': legendRank,
       if (legendGroup != '') 'legendgroup': legendGroup,
-      'mode': mode,
-      if (ids != null) 'ids': ids,
       if (x0 != 0) 'x0': x0,
       if (dx != 1) 'dx': dx,
       if (y0 != 0) 'y0': y0,
@@ -534,23 +456,3 @@ class ScatterTrace<D, R> {
   }
 }
 
-enum TraceVisibility {
-  on('true'),
-  off('false'),
-  legendOnly('legendonly');
-
-  const TraceVisibility(this._value);
-  final String _value;
-
-  static TraceVisibility parse(String value) {
-    return switch (value) {
-      'true' => on,
-      'false' => off,
-      'legendonly' => legendOnly,
-      _ => throw ArgumentError('Can\'t parse $value as a TraceVisibility'),
-    };
-  }
-
-  @override
-  String toString() => _value;
-}
