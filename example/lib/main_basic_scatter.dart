@@ -41,12 +41,12 @@ class LineAndScatterCharts extends State<MyHomePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            // Expanded(child: simple()),
+            Expanded(child: simple()),
             // const SizedBox(height: 32),
             // Expanded(child: dataLabelsOnHover()),
             // const SizedBox(height: 32),
             // Expanded(child: areaChart()),
-            Expanded(child: barChart()),
+            // Expanded(child: barChart()),
           ],
         ),
       ),

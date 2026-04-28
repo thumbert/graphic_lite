@@ -1,5 +1,18 @@
 
 TODO: 
+ - Implement layout.barGap = 0.2 and layout.barGroupGap, explicit widths for bar traces 
+   using the width argument in the trace data.
+ - Write tests for makeData
+ - Improve the README.  Write the package manifesto.  Show short video animations 
+   of functionality.
+ - Experiment with chart reactivity    
+ - Consider writing golden tests?  
+
+# 2026-04-28
+- Some refactoring.  Trying to clean up the chart.dart file, it's getting too 
+  big.
+- Added some tests for chart_data and chart_variables.
+
 
 # 2026-04-26 (0.0.4)
 - Implemented the showLegend argument in ScatterTrace.

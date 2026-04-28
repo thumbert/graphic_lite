@@ -4,6 +4,8 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:graphic_lite/graphic_lite.dart';
 import 'package:graphic/graphic.dart' as g;
+import 'package:graphic_lite/src/display/graphics/chart_data.dart';
+import 'package:graphic_lite/src/display/graphics/chart_variables.dart';
 import 'package:graphic_lite/src/widgets/line_shape_vh.dart';
 import 'shapes_painter.dart';
 
@@ -215,10 +217,10 @@ class _ChartState extends State<Chart> {
   late (num, num) _domainX;
   late (num, num) _domainY;
 
-  (num, num) _computeYDomainFromData(List<Map<String, dynamic>> pts) {
+  (num, num) _computeYDomainFromData(List<Map<String, dynamic>> points) {
     var minY = double.infinity;
     var maxY = double.negativeInfinity;
-    for (final e in pts) {
+    for (final e in points) {
       final yVal = e['y'];
       if (yVal is num) {
         if (yVal < minY) minY = yVal.toDouble();
@@ -231,196 +233,32 @@ class _ChartState extends State<Chart> {
 
   /// Prepare the data for [graphics].
   ///
+  /// Delegates to [buildChartData] and updates the domain/type fields as a
+  /// side effect so the rest of the widget can reference them.
   List<Map<String, dynamic>> makeData(List<Trace> traces) {
-    // Pre-compute y_fill for toNextY traces: map from x value → previous trace's y.
-    final fillYMaps = <int, Map<Object, double>>{};
-    for (var i = 0; i < traces.length; i++) {
-      if (traces[i] is ScatterTrace &&
-          (traces[i] as ScatterTrace).fill == Fill.toNextY) {
-        final yMap = <Object, double>{};
-        for (var pi = i - 1; pi >= 0; pi--) {
-          if (traces[pi].visible != TraceVisibility.off) {
-            for (var j = 0; j < traces[pi].x.length; j++) {
-              final yVal = traces[pi].y[j];
-              if (yVal is num) yMap[traces[pi].x[j]] = yVal.toDouble();
-            }
-            break;
-          }
-        }
-        fillYMaps[i] = yMap;
-      }
-    }
-
-    var minXNum = double.infinity;
-    var maxXNum = double.negativeInfinity;
-    var minYNum = double.infinity;
-    var maxYNum = double.negativeInfinity;
-    DateTime? minDt;
-    DateTime? maxDt;
-    final data = <Map<String, dynamic>>[];
-    for (var i = 0; i < traces.length; i++) {
-      final trace = traces[i];
-      if (trace.visible == TraceVisibility.off) continue;
-      for (var j = 0; j < trace.x.length; j++) {
-        final xVal = trace.x[j];
-        if (xVal is DateTime) {
-          if (minDt == null || xVal.isBefore(minDt)) minDt = xVal;
-          if (maxDt == null || xVal.isAfter(maxDt)) maxDt = xVal;
-        } else if (xVal is num) {
-          if (xVal < minXNum) minXNum = xVal.toDouble();
-          if (xVal > maxXNum) maxXNum = xVal.toDouble();
-        }
-        final yVal = trace.y[j];
-        if (yVal is num) {
-          if (yVal < minYNum) minYNum = yVal.toDouble();
-          if (yVal > maxYNum) maxYNum = yVal.toDouble();
-        }
-        final yFill = (trace is ScatterTrace && trace.fill == Fill.toNextY)
-            ? (fillYMaps[i]?[trace.x[j]] ?? 0.0)
-            : 0.0;
-        // Scatter traces carry a per-point marker list; bar traces a single marker.
-        final markerForPoint = switch (trace) {
-          ScatterTrace s when s.marker != null =>
-            s.marker!.length == 1 ? s.marker!.first : s.marker![j],
-          BarTrace b when b.marker != null =>
-            b.marker!.length == 1 ? b.marker!.first : b.marker![j],
-          _ => null,
-        };
-        data.add({
-          'x': trace.x[j],
-          'y': trace.y[j],
-          'y_fill': yFill,  // move this in a separate function
-          'name': trace.name ?? 'trace $i',
-          if (trace.text != null)
-            'text': trace.text!.length == 1
-                ? trace.text!.first
-                : trace.text![j],
-          'marker': ?markerForPoint,
-        });
-      }
-    }
-    // Match graphic's 10% margin on each side of the data range — the same
-    // formula used by LinearScale and TimeScale internally.
-    if (minDt != null && maxDt != null) {
-      _xIsDateTime = true;
-      final minMicro = minDt.microsecondsSinceEpoch.toDouble();
-      final maxMicro = maxDt.microsecondsSinceEpoch.toDouble();
-      final range = maxMicro == minMicro ? 1e6 : maxMicro - minMicro;
-      _domainX = (minMicro - 0.1 * range, maxMicro + 0.1 * range);
-    } else {
-      _xIsDateTime = false;
-      final xRange = maxXNum == minXNum ? 10.0 : maxXNum - minXNum;
-      _domainX = (minXNum - 0.1 * xRange, maxXNum + 0.1 * xRange);
-    }
-    final yRange = maxYNum == minYNum ? 10.0 : maxYNum - minYNum;
-    _domainY = (minYNum - 0.1 * yRange, maxYNum + 0.1 * yRange);
-    return data;
+    final result = buildChartData(traces);
+    _xIsDateTime = result.xIsDateTime;
+    _domainX = result.domainX;
+    _domainY = result.domainY;
+    return result.data;
   }
-
-  final variableXInt = g.Variable(accessor: (Map map) => map['x'] as int);
-  final variableXNum = g.Variable(accessor: (Map map) => map['x'] as num);
-  final variableXDateTime = g.Variable(
-    accessor: (Map map) => map['x'] as DateTime,
-  );
-  final variableXString = g.Variable(accessor: (Map map) => map['x'] as String);
-
-  final variableYInt = g.Variable(accessor: (Map map) => map['y'] as int);
-  final variableYNum = g.Variable(accessor: (Map map) => map['y'] as num);
-  final variableYString = g.Variable(accessor: (Map map) => map['y'] as String);
 
   /// Variables for the chart as needed by package `graphic`.
   ///
-  /// When [domainX] / [domainY] are provided, explicit axis scales are set so
-  /// that the chart shows exactly the selected range.
+  /// Delegates to [buildChartVariables]. When [domainX] / [domainY] are
+  /// provided, explicit axis scales are set so the chart shows exactly the
+  /// selected range; otherwise the full data domain computed by [makeData] is
+  /// used.
   Map<String, g.Variable<Map<dynamic, dynamic>, dynamic>> makeVariables(
-    List<Map<String, dynamic>> data,
-    List<Trace> traces, {
+    List<Map<String, dynamic>> data, {
     (num, num)? domainX,
     (num, num)? domainY,
   }) {
-    final out = <String, g.Variable<Map<dynamic, dynamic>, dynamic>>{};
-
-    // Detect x/y types from the first data point rather than the generic list
-    // type, so the method works for any mix of trace types (ScatterTrace,
-    // BarTrace, etc.) without requiring list-type pattern matching.
-    final sampleX = data.isNotEmpty ? data.first['x'] : null;
-    final sampleY = data.isNotEmpty ? data.first['y'] : null;
-
-    if (domainX != null && sampleX is! String) {
-      final xScale = sampleX is DateTime
-          ? g.TimeScale(
-              min: DateTime.fromMicrosecondsSinceEpoch(domainX.$1.round()),
-              max: DateTime.fromMicrosecondsSinceEpoch(domainX.$2.round()),
-            )
-          : g.LinearScale(min: domainX.$1, max: domainX.$2);
-      out['x'] = switch (sampleX) {
-        DateTime() => g.Variable(
-          accessor: (Map map) => map['x'] as DateTime,
-          scale: xScale as g.Scale<DateTime, num>,
-        ),
-        int() => g.Variable(
-          accessor: (Map map) => map['x'] as int,
-          scale: xScale as g.Scale<num, num>,
-        ),
-        _ => g.Variable(
-          accessor: (Map map) => map['x'] as num,
-          scale: xScale as g.Scale<num, num>,
-        ),
-      };
-    } else {
-      out['x'] = switch (sampleX) {
-        DateTime() => variableXDateTime,
-        int() => variableXInt,
-        String() => variableXString,
-        _ => variableXNum,
-      };
-    }
-
-    // y and y_fill must share the SAME scale object (graphic assertion in
-    // PositionEncoderOp requires all variables in the same Varset dimension
-    // to reference an identical scale instance).
-    if (domainY != null) {
-      final yScale = g.LinearScale(min: domainY.$1, max: domainY.$2);
-      out['y'] = switch (sampleY) {
-        int() => g.Variable(
-          accessor: (Map map) => map['y'] as int,
-          scale: yScale as g.Scale<num, num>,
-        ),
-        _ => g.Variable(
-          accessor: (Map map) => map['y'] as num,
-          scale: yScale as g.Scale<num, num>,
-        ),
-      };
-      out['y_fill'] = g.Variable(
-        accessor: (Map map) => (map['y_fill'] ?? 0.0) as num,
-        scale: yScale, // same instance as y
-      );
-    } else {
-      // Use _domainY (set by makeData) to build a shared scale.
-      final sharedYScale = g.LinearScale(min: _domainY.$1, max: _domainY.$2);
-      out['y'] = switch (sampleY) {
-        int() => g.Variable(
-          accessor: (Map map) => map['y'] as int,
-          scale: sharedYScale as g.Scale<num, num>,
-        ),
-        _ => g.Variable(
-          accessor: (Map map) => map['y'] as num,
-          scale: sharedYScale as g.Scale<num, num>,
-        ),
-      };
-      out['y_fill'] = g.Variable(
-        accessor: (Map map) => (map['y_fill'] ?? 0.0) as num,
-        scale: sharedYScale, // same instance as y
-      );
-    }
-    out['name'] = g.Variable(accessor: (Map map) => map['name'] as String);
-    out['text'] = g.Variable(
-      accessor: (Map map) => (map['text'] ?? '') as String,
+    return buildChartVariables(
+      data,
+      domainX: domainX,
+      domainY: domainY ?? _domainY,
     );
-    out['marker.size'] = g.Variable(
-      accessor: (Map map) => (map['marker'] as Marker?)?.size.toDouble() ?? 6.0,
-    );
-    return out;
   }
 
   /// Custom tooltip renderer that colors the tooltip text to match the
@@ -497,7 +335,9 @@ class _ChartState extends State<Chart> {
       if (trace is! ScatterTrace) continue;
       if ((trace.name ?? 'trace $i') == name && trace.mode.contains('lines')) {
         final ls = trace.line?.shape ?? LineShape.linear;
-        final dash = _dashPattern(trace.line?.dash ?? Dash.solid);
+        final dash = trace.line?.dash.dashPattern(
+          trace.line?.dash ?? Dash.solid,
+        );
         return switch (ls) {
           LineShape.spline => g.BasicLineShape(smooth: true, dash: dash),
           LineShape.hv => g.BasicLineShape(stepped: true, dash: dash),
@@ -508,16 +348,6 @@ class _ChartState extends State<Chart> {
     }
     return g.BasicLineShape();
   }
-
-  /// Converts a [Dash] enum value to a dash-pattern list for [g.BasicLineShape].
-  List<double>? _dashPattern(Dash dash) => switch (dash) {
-    Dash.solid => null,
-    Dash.dashed => [6, 4],
-    Dash.dotted => [2, 4],
-    Dash.longDash => [12, 4],
-    Dash.dashDot => [6, 4, 2, 4],
-    Dash.longDashDot => [12, 4, 2, 4],
-  };
 
   /// Check the mode of each trace and return the appropriate marks.
   /// The `mode` can be null.
@@ -685,7 +515,6 @@ class _ChartState extends State<Chart> {
     data = makeData(widget.traces);
     final variables = makeVariables(
       data,
-      widget.traces,
       domainX: _filteredDomainX,
       domainY: _filteredDomainY,
     );
@@ -1062,8 +891,7 @@ class _ChartState extends State<Chart> {
   /// Legend swatch for a [ScatterTrace]: fill rectangle + line + marker dot.
   Widget _buildScatterSwatch(ScatterTrace trace, int i, bool isVisible) {
     final lineColor = trace.line?.color;
-    final lineDrawColor =
-        (lineColor != null && lineColor != Colors.transparent)
+    final lineDrawColor = (lineColor != null && lineColor != Colors.transparent)
         ? lineColor
         : Defaults.colors[i];
     final markerColor0 = trace.marker?.first.color;
@@ -1072,8 +900,9 @@ class _ChartState extends State<Chart> {
         ? markerColor0
         : Defaults.colors[i];
     final lineSwatchColor = isVisible ? lineDrawColor : Colors.grey.shade400;
-    final markerSwatchColor =
-        isVisible ? markerDrawColor : Colors.grey.shade400;
+    final markerSwatchColor = isVisible
+        ? markerDrawColor
+        : Colors.grey.shade400;
 
     Color? fillSwatchColor;
     if (trace.fill != Fill.none) {
@@ -1082,8 +911,11 @@ class _ChartState extends State<Chart> {
       } else {
         final mc = trace.marker?.first.color;
         Color base = Defaults.colors[i];
-        if (lineDrawColor != Colors.transparent) base = lineDrawColor;
-        else if (mc is Color && mc != Colors.transparent) base = mc;
+        if (lineDrawColor != Colors.transparent) {
+          base = lineDrawColor;
+        } else if (mc is Color && mc != Colors.transparent) {
+          base = mc;
+        }
         fillSwatchColor = base.withValues(alpha: 0.5);
       }
       if (!isVisible) fillSwatchColor = fillSwatchColor.withValues(alpha: 0.3);
@@ -1110,7 +942,9 @@ class _ChartState extends State<Chart> {
               painter: _LegendLinePainter(
                 color: lineSwatchColor,
                 strokeWidth: (trace.line?.width ?? 2.0).toDouble(),
-                dash: _dashPattern(trace.line?.dash ?? Dash.solid),
+                dash: trace.line?.dash.dashPattern(
+                  trace.line?.dash ?? Dash.solid,
+                ),
               ),
             ),
           if (trace.mode.contains('markers'))
@@ -1129,7 +963,9 @@ class _ChartState extends State<Chart> {
 
   /// Legend swatch for a [BarTrace]: solid colored rectangle.
   Widget _buildBarSwatch(BarTrace trace, int i, bool isVisible) {
-    final mc = trace.marker?.isNotEmpty == true ? trace.marker!.first.color : null;
+    final mc = trace.marker?.isNotEmpty == true
+        ? trace.marker!.first.color
+        : null;
     Color barColor = Defaults.colors[i];
     if (mc is Color && mc != Colors.transparent) barColor = mc;
     final swatchColor = isVisible ? barColor : Colors.grey.shade400;
