@@ -51,10 +51,6 @@ class ScatterTrace<D, R> extends Trace<D, R> {
   /// Name of the trace, shown in the legend and on hover.
   // String? name;
 
-  /// Sets the marker for the trace.  A list with only one element means that
-  /// the value applies to all elements of the trace. See `Marker` for
-  /// more details.
-  late List<Marker>? marker;
 
   /// Sets the line for the trace. See `Line` for more details.
   late Line? line;

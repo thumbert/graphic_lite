@@ -2,11 +2,14 @@
 TODO: 
  - Implement layout.barGap = 0.2 and layout.barGroupGap, explicit widths for bar traces 
    using the width argument in the trace data.
- - Write tests for makeData
+ - Implement y2 axis
  - Improve the README.  Write the package manifesto.  Show short video animations 
    of functionality.
  - Experiment with chart reactivity    
  - Consider writing golden tests?  
+
+# 2026-05-02
+- Improved the example gallery
 
 # 2026-04-28
 - Some refactoring.  Trying to clean up the chart.dart file, it's getting too 

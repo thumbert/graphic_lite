@@ -13,20 +13,18 @@ class BarTrace<D, R> extends Trace<D, R> {
     required List<R> y,
     String? name,
     List<String>? text,
-    this.marker,
+    List<Marker>? marker,
     bool showLegend = true,
   }) {
     this.x = x;
     this.y = y;
     this.name = name;
     this.text = text;
+    this.marker = marker;
     this.showLegend = showLegend;
     assert(x.length == y.length);
   }
 
-  /// Sets the marker for each bar. A list with only one element means that the
-  /// value applies to all bars of the trace. See [Marker] for more details.
-  List<Marker>? marker;
 
   /// Sets where the bar base is drawn (in position axis units). In "stack" or
   /// "relative" barmode, traces that set "base" will be excluded and drawn in

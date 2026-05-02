@@ -35,8 +35,8 @@ Map<String, g.Variable<Map<dynamic, dynamic>, dynamic>> buildChartVariables(
         accessor: (Map map) => map['x'] as DateTime,
         scale: xScale as g.Scale<DateTime, num>,
       ),
-      int() => g.Variable(
-        accessor: (Map map) => map['x'] as int,
+      num() => g.Variable(
+        accessor: (Map map) => map['x'] as num,
         scale: xScale as g.Scale<num, num>,
       ),
       _ => g.Variable(
@@ -47,7 +47,7 @@ Map<String, g.Variable<Map<dynamic, dynamic>, dynamic>> buildChartVariables(
   } else {
     out['x'] = switch (sampleX) {
       DateTime() => g.Variable(accessor: (Map map) => map['x'] as DateTime),
-      int() => g.Variable(accessor: (Map map) => map['x'] as int),
+      num() => g.Variable(accessor: (Map map) => map['x'] as num),
       String() => g.Variable(accessor: (Map map) => map['x'] as String),
       _ => g.Variable(accessor: (Map map) => map['x'] as num),
     };
@@ -56,8 +56,8 @@ Map<String, g.Variable<Map<dynamic, dynamic>, dynamic>> buildChartVariables(
   // ── y / y_fill variables — must share the same scale instance ─────────────
   final yScale = g.LinearScale(min: domainY.$1, max: domainY.$2);
   out['y'] = switch (sampleY) {
-    int() => g.Variable(
-      accessor: (Map map) => map['y'] as int,
+    num() => g.Variable(
+      accessor: (Map map) => map['y'] as num,
       scale: yScale as g.Scale<num, num>,
     ),
     _ => g.Variable(

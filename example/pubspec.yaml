@@ -15,11 +15,13 @@ dependencies:
   csv: '>=7.0.0 <8.0.0'
   date: 
     git: https://github.com/thumbert/date.git
+  google_fonts: '>=8.0.2 <9.0.0'
   graphic: ^2.7.0
   http: ^1.6.0
   graphic_lite:
     path: ..
   signals_flutter: ^6.2.0
+  syntax_highlight: ^0.5.0
   timezone: ^0.11.0
 
 dev_dependencies:
@@ -31,6 +33,14 @@ dev_dependencies:
 flutter:
 
   uses-material-design: true
+
+  assets:
+    - lib/examples/area_chart.dart
+    - lib/examples/basic_bar_chart.dart
+    - lib/examples/data_labels_on_hover.dart
+    - lib/examples/simple_scatter_plot.dart
+
+
 
   # To add assets to your application, add an assets section, like this:
   # assets:
@@ -48,17 +58,23 @@ flutter:
   # "family" key with the font family name, and a "fonts" key with a
   # list giving the asset and other descriptors for the font. For
   # example:
-  # fonts:
-  #   - family: Schyler
-  #     fonts:
-  #       - asset: fonts/Schyler-Regular.ttf
-  #       - asset: fonts/Schyler-Italic.ttf
-  #         style: italic
-  #   - family: Trajan Pro
-  #     fonts:
-  #       - asset: fonts/TrajanPro.ttf
-  #       - asset: fonts/TrajanPro_Bold.ttf
-  #         weight: 700
+  fonts:
+    # - family: Schyler
+    #   fonts:
+    #     - asset: fonts/Schyler-Regular.ttf
+    #     - asset: fonts/Schyler-Italic.ttf
+    #       style: italic
+    - family: UbuntuMono
+      fonts:
+        - asset: assets/fonts/UbuntuMono-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/UbuntuMono-Bold.ttf
+          weight: 700    
+    # - family: Trajan Pro
+    #   fonts:
+    #     - asset: fonts/TrajanPro.ttf
+    #     - asset: fonts/TrajanPro_Bold.ttf
+    #       weight: 700
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package

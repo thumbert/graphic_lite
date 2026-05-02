@@ -57,7 +57,11 @@ class _LegendLinePainter extends CustomPainter {
 
 class Chart extends StatefulWidget {
   Chart({super.key, required this.traces, Layout? layout})
-    : layout = layout ?? Layout.getDefault();
+    : layout = layout ?? Layout.getDefault() {
+      for (var i = 0; i < traces.length; i++) {
+        traces[i].name ??= 'trace $i';
+      }
+    }
 
   final List<Trace> traces;
   final Layout layout;
@@ -276,7 +280,7 @@ class _ChartState extends State<Chart> {
     Color traceColor = const Color(0xff595959);
     for (var i = 0; i < widget.traces.length; i++) {
       final trace = widget.traces[i];
-      if ((trace.name ?? 'trace $i') == name) {
+      if (trace.name == name) {
         traceColor = Defaults.colors[i];
         break;
       }
@@ -333,7 +337,7 @@ class _ChartState extends State<Chart> {
     for (var i = 0; i < traces.length; i++) {
       final trace = traces[i];
       if (trace is! ScatterTrace) continue;
-      if ((trace.name ?? 'trace $i') == name && trace.mode.contains('lines')) {
+      if (trace.name  == name && trace.mode.contains('lines')) {
         final ls = trace.line?.shape ?? LineShape.linear;
         final dash = trace.line?.dash.dashPattern(
           trace.line?.dash ?? Dash.solid,
@@ -349,18 +353,15 @@ class _ChartState extends State<Chart> {
     return g.BasicLineShape();
   }
 
-  /// Check the mode of each trace and return the appropriate marks.
-  /// The `mode` can be null.
-  ///
   List<g.Mark<g.Shape>> makeMarks(List<Trace> traces) {
     return [
-      if (traces.any((t) => t is ScatterTrace)) ..._makeScatterMarks(traces),
-      if (traces.any((t) => t is BarTrace)) _makeIntervalMark(traces),
+        ..._makeScatterMarks(traces.whereType<ScatterTrace>().toList()),
+        _makeIntervalMark(traces.whereType<BarTrace>().toList()),
     ];
   }
 
   /// Marks for [ScatterTrace] entries: AreaMark + LineMark + PointMark.
-  List<g.Mark<g.Shape>> _makeScatterMarks(List<Trace> traces) {
+  List<g.Mark<g.Shape>> _makeScatterMarks(List<ScatterTrace> traces) {
     return [
       // Area fills are drawn first so they appear below lines and markers.
       g.AreaMark(
@@ -372,8 +373,7 @@ class _ChartState extends State<Chart> {
           encoder: (e) {
             for (var i = 0; i < traces.length; i++) {
               final trace = traces[i];
-              if (trace is! ScatterTrace) continue;
-              if ((trace.name ?? 'trace $i') != e['name']) continue;
+              if (trace.name != e['name']) continue;
               if (trace.visible == TraceVisibility.off) {
                 return Colors.transparent;
               }
@@ -397,8 +397,7 @@ class _ChartState extends State<Chart> {
           encoder: (e) {
             for (var i = 0; i < traces.length; i++) {
               final trace = traces[i];
-              if (trace is! ScatterTrace) continue;
-              if ((trace.name ?? 'trace $i') != e['name']) continue;
+              if (trace.name != e['name']) continue;
               final ls = trace.line?.shape ?? LineShape.linear;
               return switch (trace.fill) {
                 Fill.toSelf => g.BasicAreaShape(loop: true),
@@ -421,8 +420,7 @@ class _ChartState extends State<Chart> {
           encoder: (e) {
             for (var i = 0; i < traces.length; i++) {
               final trace = traces[i];
-              if (trace is! ScatterTrace) continue;
-              if ((trace.name ?? 'trace $i') == e['name']) {
+              if (trace.name == e['name']) {
                 return (trace.line?.width ?? 2.0).toDouble();
               }
             }
@@ -433,9 +431,8 @@ class _ChartState extends State<Chart> {
           encoder: (e) {
             for (var i = 0; i < traces.length; i++) {
               final trace = traces[i];
-              if (trace is! ScatterTrace) continue;
               if (trace.visible == TraceVisibility.off) continue;
-              if ((trace.name ?? 'trace $i') == e['name']) {
+              if (trace.name == e['name']) {
                 if (trace.mode.contains('lines')) {
                   final lineColor = trace.line?.color;
                   if (lineColor != null && lineColor != Colors.transparent) {
@@ -454,9 +451,8 @@ class _ChartState extends State<Chart> {
           encoder: (e) {
             for (var i = 0; i < traces.length; i++) {
               final trace = traces[i];
-              if (trace is! ScatterTrace) continue;
               if (trace.visible == TraceVisibility.off) continue;
-              if ((trace.name ?? 'trace $i') == e['name']) {
+              if (trace.name == e['name']) {
                 if (trace.mode.contains('markers')) {
                   final mc = trace.marker?.first.color;
                   if (mc is Color && mc != Colors.transparent) return mc;
@@ -471,9 +467,8 @@ class _ChartState extends State<Chart> {
           encoder: (e) {
             for (var i = 0; i < traces.length; i++) {
               final trace = traces[i];
-              if (trace is! ScatterTrace) continue;
               if (trace.visible == TraceVisibility.off) continue;
-              if ((trace.name ?? 'trace $i') == e['name']) {
+              if (trace.name == e['name']) {
                 if (trace.mode.contains('markers')) {
                   return e['marker.size'] as double;
                 }
@@ -487,16 +482,15 @@ class _ChartState extends State<Chart> {
   }
 
   /// Mark for [BarTrace] entries: IntervalMark (grouped bars).
-  g.IntervalMark _makeIntervalMark(List<Trace> traces) {
+  g.IntervalMark _makeIntervalMark(List<BarTrace> traces) {
     return g.IntervalMark(
       position: g.Varset('x') * g.Varset('y') / g.Varset('name'),
       color: g.ColorEncode(
         encoder: (e) {
           for (var i = 0; i < traces.length; i++) {
             final trace = traces[i];
-            if (trace is! BarTrace) continue;
             if (trace.visible == TraceVisibility.off) continue;
-            if ((trace.name ?? 'trace $i') == e['name']) {
+            if (trace.name == e['name']) {
               final mc = trace.marker?.isNotEmpty == true
                   ? trace.marker!.first.color
                   : null;

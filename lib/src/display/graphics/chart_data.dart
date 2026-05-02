@@ -75,8 +75,8 @@ ChartDataResult buildChartData(List<Trace> traces) {
         if (yVal > maxYNum) maxYNum = yVal.toDouble();
       }
       final yFill = (trace is ScatterTrace && trace.fill == Fill.toNextY)
-          ? (fillYMaps[i]?[trace.x[j]] ?? 0.0)
-          : 0.0;
+          ? (fillYMaps[i]?[trace.x[j]])
+          : null;
       final markerForPoint = switch (trace) {
         ScatterTrace s when s.marker != null =>
           s.marker!.length == 1 ? s.marker!.first : s.marker![j],
@@ -87,7 +87,8 @@ ChartDataResult buildChartData(List<Trace> traces) {
       data.add({
         'x': trace.x[j],
         'y': trace.y[j],
-        if (trace is ScatterTrace && trace.fill != Fill.none) 'y_fill': yFill,
+        // if (trace is ScatterTrace && trace.fill != Fill.none) 'y_fill': yFill,
+        'y_fill': yFill,
         'name': trace.name ?? 'trace $i',
         if (trace.text != null)
           'text': trace.text!.length == 1
