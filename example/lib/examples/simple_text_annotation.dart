@@ -1,8 +1,7 @@
-import 'dart:ui';
-
+import 'package:flutter/widgets.dart';
 import 'package:graphic_lite/graphic_lite.dart';
 
-Chart simpleAnnotation() {
+Chart simpleTextAnnotation() {
   final traces = [
     ScatterTrace(
       x: [0, 1, 2, 3, 4, 5, 6, 7, 8],
@@ -18,12 +17,11 @@ Chart simpleAnnotation() {
     annotations: [
       Annotation(
         x: 2,
-        y: 3,
+        y: 5,
         xRef: 'x',
         yRef: 'y',
-        
-        text: 'Annotation Text',
-        arrow: Arrow(color: const Color(0xFF800080)),
+        text: Text('Annotation Text'),
+        arrow: Arrow(color: const Color(0xFF800080), ax: 0, ay: -40, width: 2),
       ),
     ],
   );

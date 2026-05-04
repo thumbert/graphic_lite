@@ -2,10 +2,10 @@ name: gallery
 description: "Examples gallery for graphic_lite"
 publish_to: 'none' 
 
-version: 1.0.0+1
+version: 0.3.0
 
 environment:
-  sdk: ^3.10.0
+  sdk: ^3.11.0
 
 dependencies:
   flutter:
@@ -40,6 +40,7 @@ flutter:
     - lib/examples/data_labels_on_hover.dart
     - lib/examples/grouped_bar_chart.dart
     - lib/examples/simple_scatter_plot.dart
+    - lib/examples/simple_text_annotation.dart
     - lib/examples/stacked_bar_chart.dart
 
 

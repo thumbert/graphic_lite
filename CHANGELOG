@@ -4,15 +4,15 @@ TODO:
  - Improve the README.  Write the package manifesto.  Show short video animations 
    of functionality.
  - Add example of various line types
- - Add example of simple text annotation
  - Experiment with chart reactivity    
  - Consider writing golden tests?  
+ - Implement explicit widths for bar traces using the width argument in the trace data.
 
 # 2026-05-03
  - Implement layout.barMode for grouped/stacked bars. 
  - Implement layout.barGap = 0.2 and layout.barGroupGap, 
- - Implement explicit widths for bar traces using the width argument in the trace data.
  - Change scatter trace mode from String to an Enum  
+ - Add example of simple text annotation
 
 # 2026-05-02
 - Improved the example gallery

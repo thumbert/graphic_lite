@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart' hide Title;
 import 'package:flutter/services.dart';
-import 'package:gallery/examples/area_chart.dart';
-import 'package:gallery/examples/basic_bar_chart.dart';
-import 'package:gallery/examples/data_labels_on_hover.dart';
-import 'package:gallery/examples/grouped_bar_chart.dart';
-import 'package:gallery/examples/simple_scatter_plot.dart';
-import 'package:gallery/examples/stacked_bar_chart.dart';
 import 'package:syntax_highlight/syntax_highlight.dart';
+
+import 'examples/area_chart.dart';
+import 'examples/basic_bar_chart.dart';
+import 'examples/data_labels_on_hover.dart';
+import 'examples/grouped_bar_chart.dart';
+import 'examples/simple_scatter_plot.dart';
+import 'examples/simple_text_annotation.dart';
+import 'examples/stacked_bar_chart.dart';
 
 late final Highlighter _dartLightHighlighter;
 
@@ -72,6 +74,9 @@ class GalleryCharts extends State<MyHomePage> {
     rootBundle
         .loadString('lib/examples/grouped_bar_chart.dart')
         .then((src) => setState(() => _source[5] = src));
+    rootBundle
+        .loadString('lib/examples/simple_text_annotation.dart')
+        .then((src) => setState(() => _source[6] = src));
   }
 
   static const _navItems = [
@@ -81,6 +86,7 @@ class GalleryCharts extends State<MyHomePage> {
     'Basic Bar Chart',
     'Stacked Bar Chart',
     'Grouped Bar Chart',
+    'Simple Text Annotation',
   ];
 
   Widget _buildContent() {
@@ -118,6 +124,11 @@ class GalleryCharts extends State<MyHomePage> {
         break;
       case 5:
         widgets = [SizedBox(width: 800, height: 500, child: groupedBarChart())];
+        break;
+      case 6:
+        widgets = [
+          SizedBox(width: 800, height: 500, child: simpleTextAnnotation()),
+        ];
         break;
       default:
         widgets = [

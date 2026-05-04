@@ -7,6 +7,7 @@ import 'package:graphic/graphic.dart' as g;
 import 'package:graphic_lite/src/display/graphics/chart_data.dart';
 import 'package:graphic_lite/src/display/graphics/chart_variables.dart';
 import 'package:graphic_lite/src/widgets/line_shape_vh.dart';
+import 'annotations_painter.dart';
 import 'shapes_painter.dart';
 
 /// A [CustomPainter] that draws a dashed/dotted line for the legend swatch.
@@ -729,6 +730,20 @@ class _ChartState extends State<Chart> {
                     shapes: widget.layout.shapes!
                         .where((s) => s.layer == ShapeLayer.above)
                         .toList(),
+                    domainX: (_filteredDomainX ?? _domainX),
+                    domainY: (_filteredDomainY ?? _domainY),
+                  ),
+                ),
+              ),
+            ),
+          // annotations (text + optional arrows) on top of all chart content
+          if (widget.layout.annotations != null &&
+              widget.layout.annotations!.isNotEmpty)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: AnnotationsPainter(
+                    annotations: widget.layout.annotations!,
                     domainX: (_filteredDomainX ?? _domainX),
                     domainY: (_filteredDomainY ?? _domainY),
                   ),

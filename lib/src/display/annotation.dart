@@ -1,5 +1,5 @@
-import 'dart:ui';
 
+import 'package:flutter/widgets.dart';
 import 'package:graphic_lite/src/display/arrow.dart';
 import 'package:graphic_lite/src/display/enums.dart';
 
@@ -26,7 +26,7 @@ class Annotation {
   });
 
   /// Sets the text associated with this annotation.
-  final String text;
+  final Text text;
 
   /// Sets the annotation's x position. If the axis `type` is "log",
   /// then you must take the log of your desired range. If the axis `type`
