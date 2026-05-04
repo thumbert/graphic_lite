@@ -58,10 +58,10 @@ class _LegendLinePainter extends CustomPainter {
 class Chart extends StatefulWidget {
   Chart({super.key, required this.traces, Layout? layout})
     : layout = layout ?? Layout.getDefault() {
-      for (var i = 0; i < traces.length; i++) {
-        traces[i].name ??= 'trace $i';
-      }
+    for (var i = 0; i < traces.length; i++) {
+      traces[i].name ??= 'trace $i';
     }
+  }
 
   final List<Trace> traces;
   final Layout layout;
@@ -84,6 +84,11 @@ class _ChartState extends State<Chart> {
   /// handling logic to filter data points based on user interactions
   /// (like drag selection).
   late List<Map<String, dynamic>> data;
+  bool _hasFill = false;
+
+  // Cursor position updated on every hover event (no setState — used only in
+  // _tooltipRenderer which runs synchronously after the gesture is processed).
+  Offset _hoverLocalPosition = Offset.zero;
 
   (num, num)? _filteredDomainX;
   (num, num)? _filteredDomainY;
@@ -198,6 +203,9 @@ class _ChartState extends State<Chart> {
             _filteredDomainY = null;
             _currentSelectionNormalized = null;
           });
+        } else if (geg.type == g.GestureType.hover) {
+          // Track cursor position for stacked-bar tooltip hit-testing.
+          _hoverLocalPosition = geg.localPosition;
         }
       } catch (err) {
         // swallow any cast errors or runtime hiccups during gesture handling
@@ -240,10 +248,11 @@ class _ChartState extends State<Chart> {
   /// Delegates to [buildChartData] and updates the domain/type fields as a
   /// side effect so the rest of the widget can reference them.
   List<Map<String, dynamic>> makeData(List<Trace> traces) {
-    final result = buildChartData(traces);
+    final result = buildChartData(traces, layout: widget.layout);
     _xIsDateTime = result.xIsDateTime;
     _domainX = result.domainX;
     _domainY = result.domainY;
+    _hasFill = result.hasFill;
     return result.data;
   }
 
@@ -262,6 +271,7 @@ class _ChartState extends State<Chart> {
       data,
       domainX: domainX,
       domainY: domainY ?? _domainY,
+      includeYFill: _hasFill,
     );
   }
 
@@ -274,9 +284,90 @@ class _ChartState extends State<Chart> {
   ) {
     if (selectedTuples.isEmpty) return [];
 
-    final tuple = selectedTuples.values.first;
-    final name = tuple['name'] as String;
+    // For stacked/grouped bar charts, multiple tuples share the same x column.
+    // Pick the bar segment actually under the cursor.
+    g.Tuple tuple;
+    if (widget.layout.barMode == BarMode.stack && selectedTuples.length > 1) {
+      // Map cursor y → data y using chart padding + domain.
+      const topPad = 5.0;
+      const bottomPad = 40.0;
+      final innerHeight = size.height - topPad - bottomPad;
+      final cursorInnerY = _hoverLocalPosition.dy - topPad;
+      final normalizedY = 1.0 - cursorInnerY / innerHeight;
+      final cursorDataY =
+          _domainY.$1 + normalizedY * (_domainY.$2 - _domainY.$1);
 
+      // Build stacked ranges in trace order and find which one contains cursor.
+      final xVal = selectedTuples.values.first['x'];
+      double cumulativeBottom = 0.0;
+      g.Tuple? hit;
+      for (final trace in widget.traces.whereType<BarTrace>()) {
+        if (trace.visible == TraceVisibility.off) continue;
+        final idx = trace.x.indexWhere((v) => v == xVal);
+        if (idx < 0) continue;
+        final barY = (trace.y[idx] as num).toDouble();
+        final top = cumulativeBottom + barY;
+        final matchedEntry = selectedTuples.entries.firstWhere(
+          (e) => e.value['name'] == (trace.name ?? ''),
+          orElse: () => selectedTuples.entries.first,
+        );
+        hit = matchedEntry.value;
+        if (cursorDataY >= cumulativeBottom && cursorDataY <= top) break;
+        cumulativeBottom = top;
+      }
+      tuple = hit ?? selectedTuples.values.first;
+    } else if (widget.layout.barMode == BarMode.group &&
+        selectedTuples.length > 1) {
+      // Compute expected canvas-x for each trace's dodged bar and pick
+      // the one whose center is closest to the cursor x.
+      final barTraces = widget.traces.whereType<BarTrace>().toList();
+      final nGroups = barTraces.length;
+      final barGap = widget.layout.barGap.toDouble();
+      final categories = <Object>[];
+      for (final trace in barTraces) {
+        for (final xv in trace.x) {
+          if (!categories.contains(xv)) categories.add(xv);
+        }
+      }
+      final nCategories = categories.length;
+      final xVal = selectedTuples.values.first['x'];
+      final c = categories.indexOf(xVal);
+
+      if (c >= 0 && nCategories > 0 && nGroups > 0) {
+        const leftPad = 40.0;
+        const rightPad = 10.0;
+        final plotWidth = size.width - leftPad - rightPad;
+        final band = 1.0 / nCategories;
+        const align = 0.5; // DiscreteScale default
+        final ratio = (1 - barGap) / nGroups; // DodgeModifier ratio
+        final bias = ratio * band;
+        final accumulatedStart = -bias * (nGroups - 1) / 2.0; // symmetric
+        final catNormX = (c + align) * band;
+
+        g.Tuple? best;
+        double bestDist = double.infinity;
+        for (var b = 0; b < nGroups; b++) {
+          final trace = barTraces[b];
+          final barNormX = catNormX + accumulatedStart + b * bias;
+          final barCanvasX = leftPad + barNormX * plotWidth;
+          final dist = (_hoverLocalPosition.dx - barCanvasX).abs();
+          if (dist < bestDist) {
+            bestDist = dist;
+            best = selectedTuples.values.firstWhere(
+              (t) => t['name'] == (trace.name ?? ''),
+              orElse: () => selectedTuples.values.first,
+            );
+          }
+        }
+        tuple = best ?? selectedTuples.values.first;
+      } else {
+        tuple = selectedTuples.values.first;
+      }
+    } else {
+      tuple = selectedTuples.values.first;
+    }
+
+    final name = tuple['name'] as String;
     Color traceColor = const Color(0xff595959);
     for (var i = 0; i < widget.traces.length; i++) {
       final trace = widget.traces[i];
@@ -306,8 +397,14 @@ class _ChartState extends State<Chart> {
     final w = padding.left + painter.width + padding.right;
     final h = padding.top + painter.height + padding.bottom;
 
-    // Position tooltip just right of the anchor point, vertically centered.
-    var rect = Rect.fromLTWH(anchor.dx + 10, anchor.dy - h / 2, w, h);
+    // For stacked/grouped bars, anchor the tooltip at the cursor so it
+    // follows the mouse rather than jumping to the bar-top position.
+    final tipOrigin =
+        (widget.layout.barMode == BarMode.stack ||
+            widget.layout.barMode == BarMode.group)
+        ? _hoverLocalPosition
+        : anchor;
+    var rect = Rect.fromLTWH(tipOrigin.dx + 10, tipOrigin.dy - h / 2, w, h);
     final hAdj = rect.left < 0
         ? -rect.left
         : (rect.right > size.width ? size.width - rect.right : 0.0);
@@ -337,7 +434,7 @@ class _ChartState extends State<Chart> {
     for (var i = 0; i < traces.length; i++) {
       final trace = traces[i];
       if (trace is! ScatterTrace) continue;
-      if (trace.name  == name && trace.mode.contains('lines')) {
+      if (trace.name == name && trace.mode.toString().contains('lines')) {
         final ls = trace.line?.shape ?? LineShape.linear;
         final dash = trace.line?.dash.dashPattern(
           trace.line?.dash ?? Dash.solid,
@@ -353,10 +450,16 @@ class _ChartState extends State<Chart> {
     return g.BasicLineShape();
   }
 
-  List<g.Mark<g.Shape>> makeMarks(List<Trace> traces) {
+  List<g.Mark<g.Shape>> makeMarks(List<Trace> traces, {double? chartWidth}) {
     return [
-        ..._makeScatterMarks(traces.whereType<ScatterTrace>().toList()),
-        _makeIntervalMark(traces.whereType<BarTrace>().toList()),
+      ..._makeScatterMarks(traces.whereType<ScatterTrace>().toList()),
+      _makeIntervalMark(
+        traces.whereType<BarTrace>().toList(),
+        barMode: widget.layout.barMode,
+        barGap: widget.layout.barGap.toDouble(),
+        barGroupGap: widget.layout.barGroupGap.toDouble(),
+        chartWidth: chartWidth,
+      ),
     ];
   }
 
@@ -364,53 +467,54 @@ class _ChartState extends State<Chart> {
   List<g.Mark<g.Shape>> _makeScatterMarks(List<ScatterTrace> traces) {
     return [
       // Area fills are drawn first so they appear below lines and markers.
-      g.AreaMark(
-        position:
-            g.Varset('x') *
-            (g.Varset('y_fill') + g.Varset('y')) /
-            g.Varset('name'),
-        color: g.ColorEncode(
-          encoder: (e) {
-            for (var i = 0; i < traces.length; i++) {
-              final trace = traces[i];
-              if (trace.name != e['name']) continue;
-              if (trace.visible == TraceVisibility.off) {
-                return Colors.transparent;
+      if (_hasFill)
+        g.AreaMark(
+          position:
+              g.Varset('x') *
+              (g.Varset('y_fill') + g.Varset('y')) /
+              g.Varset('name'),
+          color: g.ColorEncode(
+            encoder: (e) {
+              for (var i = 0; i < traces.length; i++) {
+                final trace = traces[i];
+                if (trace.name != e['name']) continue;
+                if (trace.visible == TraceVisibility.off) {
+                  return Colors.transparent;
+                }
+                if (trace.fill == Fill.none) return Colors.transparent;
+                if (trace.fillColor != null) return trace.fillColor!;
+                // Default: trace line/marker color at 50% opacity.
+                final lineColor = trace.line?.color;
+                final mc = trace.marker?.first.color;
+                Color base = Defaults.colors[i];
+                if (lineColor is Color && lineColor != Colors.transparent) {
+                  base = lineColor;
+                } else if (mc is Color && mc != Colors.transparent) {
+                  base = mc;
+                }
+                return base.withValues(alpha: 0.5);
               }
-              if (trace.fill == Fill.none) return Colors.transparent;
-              if (trace.fillColor != null) return trace.fillColor!;
-              // Default: trace line/marker color at 50% opacity.
-              final lineColor = trace.line?.color;
-              final mc = trace.marker?.first.color;
-              Color base = Defaults.colors[i];
-              if (lineColor is Color && lineColor != Colors.transparent) {
-                base = lineColor;
-              } else if (mc is Color && mc != Colors.transparent) {
-                base = mc;
+              return Colors.transparent;
+            },
+          ),
+          shape: g.ShapeEncode<g.AreaShape>(
+            encoder: (e) {
+              for (var i = 0; i < traces.length; i++) {
+                final trace = traces[i];
+                if (trace.name != e['name']) continue;
+                final ls = trace.line?.shape ?? LineShape.linear;
+                return switch (trace.fill) {
+                  Fill.toSelf => g.BasicAreaShape(loop: true),
+                  _ => g.BasicAreaShape(
+                    smooth: ls == LineShape.spline,
+                    stepped: ls == LineShape.hv || ls == LineShape.vh,
+                  ),
+                };
               }
-              return base.withValues(alpha: 0.5);
-            }
-            return Colors.transparent;
-          },
+              return g.BasicAreaShape();
+            },
+          ),
         ),
-        shape: g.ShapeEncode<g.AreaShape>(
-          encoder: (e) {
-            for (var i = 0; i < traces.length; i++) {
-              final trace = traces[i];
-              if (trace.name != e['name']) continue;
-              final ls = trace.line?.shape ?? LineShape.linear;
-              return switch (trace.fill) {
-                Fill.toSelf => g.BasicAreaShape(loop: true),
-                _ => g.BasicAreaShape(
-                  smooth: ls == LineShape.spline,
-                  stepped: ls == LineShape.hv || ls == LineShape.vh,
-                ),
-              };
-            }
-            return g.BasicAreaShape();
-          },
-        ),
-      ),
       g.LineMark(
         position: g.Varset('x') * g.Varset('y') / g.Varset('name'),
         shape: g.ShapeEncode(
@@ -433,7 +537,7 @@ class _ChartState extends State<Chart> {
               final trace = traces[i];
               if (trace.visible == TraceVisibility.off) continue;
               if (trace.name == e['name']) {
-                if (trace.mode.contains('lines')) {
+                if (trace.mode.toString().contains('lines')) {
                   final lineColor = trace.line?.color;
                   if (lineColor != null && lineColor != Colors.transparent) {
                     return lineColor;
@@ -453,7 +557,7 @@ class _ChartState extends State<Chart> {
               final trace = traces[i];
               if (trace.visible == TraceVisibility.off) continue;
               if (trace.name == e['name']) {
-                if (trace.mode.contains('markers')) {
+                if (trace.mode.toString().contains('markers')) {
                   final mc = trace.marker?.first.color;
                   if (mc is Color && mc != Colors.transparent) return mc;
                   return Defaults.colors[i];
@@ -469,7 +573,7 @@ class _ChartState extends State<Chart> {
               final trace = traces[i];
               if (trace.visible == TraceVisibility.off) continue;
               if (trace.name == e['name']) {
-                if (trace.mode.contains('markers')) {
+                if (trace.mode.toString().contains('markers')) {
                   return e['marker.size'] as double;
                 }
               }
@@ -481,10 +585,47 @@ class _ChartState extends State<Chart> {
     ];
   }
 
-  /// Mark for [BarTrace] entries: IntervalMark (grouped bars).
-  g.IntervalMark _makeIntervalMark(List<BarTrace> traces) {
+  /// Mark for [BarTrace] entries: IntervalMark with optional dodge/stack.
+  g.IntervalMark _makeIntervalMark(
+    List<BarTrace> traces, {
+    BarMode? barMode,
+    double barGap = 0.2,
+    double barGroupGap = 0,
+    double? chartWidth,
+  }) {
+    final nCategories = traces.isEmpty
+        ? 1
+        : traces.expand((t) => t.x).toSet().length;
+    final nGroups = traces.isEmpty ? 1 : traces.length;
+
+    // DodgeModifier.ratio is the step between bars as a fraction of the band.
+    // Using (1 - barGap) / nGroups leaves barGap as inter-group whitespace.
+    final List<g.Modifier> modifiers = switch (barMode) {
+      BarMode.group => [g.DodgeModifier(ratio: (1 - barGap) / nGroups)],
+      BarMode.stack => [g.StackModifier()],
+      _ => [],
+    };
+
+    // Compute bar pixel width from layout gaps and available width.
+    double? barSize;
+    if (chartWidth != null && nCategories > 0) {
+      if (barMode == BarMode.group && nGroups > 0) {
+        // Each bar occupies (1-barGroupGap) of its dodge slot.
+        barSize =
+            (1 - barGroupGap) *
+            (1 - barGap) *
+            chartWidth /
+            (nCategories * nGroups);
+      } else {
+        // Single or stacked: barGap is the fraction of category width that is gap.
+        barSize = (1 - barGap) * chartWidth / nCategories;
+      }
+    }
+
     return g.IntervalMark(
       position: g.Varset('x') * g.Varset('y') / g.Varset('name'),
+      modifiers: modifiers.isEmpty ? null : modifiers,
+      size: barSize != null ? g.SizeEncode(value: barSize) : null,
       color: g.ColorEncode(
         encoder: (e) {
           for (var i = 0; i < traces.length; i++) {
@@ -500,6 +641,115 @@ class _ChartState extends State<Chart> {
           }
           return Colors.transparent;
         },
+      ),
+    );
+  }
+
+  Widget chartArea({
+    required double usableWidth,
+    required double leftPad,
+    required String visibilityKey,
+    required Map<String, g.Variable<Map<dynamic, dynamic>, dynamic>> variables,
+  }) {
+    return Container(
+      key: _chartKey,
+      child: Stack(
+        children: [
+          // if shapes are under the chart data
+          if (widget.layout.shapes != null &&
+              widget.layout.shapes!.any((s) => s.layer == ShapeLayer.below))
+            Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: ShapesPainter(
+                    shapes: widget.layout.shapes!
+                        .where((s) => s.layer == ShapeLayer.below)
+                        .toList(),
+                    domainX: (_filteredDomainX ?? _domainX),
+                    domainY: (_filteredDomainY ?? _domainY),
+                  ),
+                ),
+              ),
+            ),
+          g.Chart(
+            key: ValueKey(visibilityKey),
+            padding: (_) => const EdgeInsets.fromLTRB(40, 5, 10, 40),
+            data: _filteredData.isNotEmpty ? _filteredData : data,
+            variables: variables,
+            marks: makeMarks(widget.traces, chartWidth: usableWidth),
+            coord: g.RectCoord(horizontalRange: [0, 1], verticalRange: [0, 1]),
+            axes: [
+              g.AxisGuide(
+                grid: g.Defaults.strokeStyle,
+                label: g.LabelStyle(
+                  textStyle: Defaults.textStyle.copyWith(color: Colors.black),
+                  offset: const Offset(0, 7.5),
+                ),
+              ),
+              g.AxisGuide(
+                grid: g.Defaults.strokeStyle,
+                label: g.LabelStyle(
+                  textStyle: Defaults.textStyle.copyWith(color: Colors.black),
+                  offset: const Offset(-7.5, 0),
+                ),
+              ),
+            ],
+            selections: {
+              'tooltipMouse': widget.traces.any((t) => t is BarTrace)
+                  ? g.PointSelection(
+                      on: {g.GestureType.hover},
+                      dim: g.Dim.x,
+                      nearest: true,
+                      // Select ALL bars in the hovered column so the renderer
+                      // can pick the one actually under the cursor.
+                      variable:
+                          (widget.layout.barMode == BarMode.stack ||
+                              widget.layout.barMode == BarMode.group)
+                          ? 'x'
+                          : null,
+                      devices: {PointerDeviceKind.mouse},
+                    )
+                  : g.PointSelection(
+                      on: {g.GestureType.hover},
+                      nearest: false,
+                      testRadius: 15.0,
+                      devices: {PointerDeviceKind.mouse},
+                    ),
+            },
+            tooltip: g.TooltipGuide(renderer: _tooltipRenderer),
+            gestureStream: _gestureController,
+          ),
+          // shapes above the chart data
+          if (widget.layout.shapes != null &&
+              widget.layout.shapes!.any((s) => s.layer == ShapeLayer.above))
+            Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: ShapesPainter(
+                    shapes: widget.layout.shapes!
+                        .where((s) => s.layer == ShapeLayer.above)
+                        .toList(),
+                    domainX: (_filteredDomainX ?? _domainX),
+                    domainY: (_filteredDomainY ?? _domainY),
+                  ),
+                ),
+              ),
+            ),
+          // if there is a selection
+          if (_currentSelectionNormalized != null)
+            Positioned(
+              left: leftPad + _currentSelectionNormalized![0] * usableWidth,
+              top: 0,
+              bottom: 0,
+              width:
+                  (_currentSelectionNormalized![1] -
+                      _currentSelectionNormalized![0]) *
+                  usableWidth,
+              child: IgnorePointer(
+                child: Container(color: Colors.grey.withAlpha(64)),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -592,159 +842,11 @@ class _ChartState extends State<Chart> {
                                           constraints.maxWidth -
                                           leftPad -
                                           rightPad;
-                                      return Container(
-                                        key: _chartKey,
-                                        child: Stack(
-                                          children: [
-                                            // if shapes are under the chart data
-                                            if (widget.layout.shapes != null &&
-                                                widget.layout.shapes!.any(
-                                                  (s) =>
-                                                      s.layer ==
-                                                      ShapeLayer.below,
-                                                ))
-                                              Positioned.fill(
-                                                child: IgnorePointer(
-                                                  child: CustomPaint(
-                                                    painter: ShapesPainter(
-                                                      shapes: widget
-                                                          .layout
-                                                          .shapes!
-                                                          .where(
-                                                            (s) =>
-                                                                s.layer ==
-                                                                ShapeLayer
-                                                                    .below,
-                                                          )
-                                                          .toList(),
-                                                      domainX:
-                                                          (_filteredDomainX ??
-                                                          _domainX),
-                                                      domainY:
-                                                          (_filteredDomainY ??
-                                                          _domainY),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            g.Chart(
-                                              key: ValueKey(visibilityKey),
-                                              padding: (_) =>
-                                                  const EdgeInsets.fromLTRB(
-                                                    40,
-                                                    5,
-                                                    10,
-                                                    40,
-                                                  ),
-                                              data: _filteredData.isNotEmpty
-                                                  ? _filteredData
-                                                  : data,
-                                              variables: variables,
-                                              marks: makeMarks(widget.traces),
-                                              coord: g.RectCoord(
-                                                horizontalRange: [0, 1],
-                                                verticalRange: [0, 1],
-                                              ),
-                                              axes: [
-                                                g.AxisGuide(
-                                                  grid: g.Defaults.strokeStyle,
-                                                  label: g.LabelStyle(
-                                                    textStyle: Defaults
-                                                        .textStyle
-                                                        .copyWith(
-                                                          color: Colors.black,
-                                                        ),
-                                                    offset: const Offset(
-                                                      0,
-                                                      7.5,
-                                                    ),
-                                                  ),
-                                                ),
-                                                g.AxisGuide(
-                                                  grid: g.Defaults.strokeStyle,
-                                                  label: g.LabelStyle(
-                                                    textStyle: Defaults
-                                                        .textStyle
-                                                        .copyWith(
-                                                          color: Colors.black,
-                                                        ),
-                                                    offset: const Offset(
-                                                      -7.5,
-                                                      0,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
-                                              selections: {
-                                                'tooltipMouse':
-                                                    g.PointSelection(
-                                                      on: {g.GestureType.hover},
-                                                      nearest: false,
-                                                      testRadius: 15.0,
-                                                      devices: {
-                                                        PointerDeviceKind.mouse,
-                                                      },
-                                                    ),
-                                              },
-                                              tooltip: g.TooltipGuide(
-                                                renderer: _tooltipRenderer,
-                                              ),
-                                              gestureStream: _gestureController,
-                                            ),
-                                            // shapes above the chart data
-                                            if (widget.layout.shapes != null &&
-                                                widget.layout.shapes!.any(
-                                                  (s) =>
-                                                      s.layer ==
-                                                      ShapeLayer.above,
-                                                ))
-                                              Positioned.fill(
-                                                child: IgnorePointer(
-                                                  child: CustomPaint(
-                                                    painter: ShapesPainter(
-                                                      shapes: widget
-                                                          .layout
-                                                          .shapes!
-                                                          .where(
-                                                            (s) =>
-                                                                s.layer ==
-                                                                ShapeLayer
-                                                                    .above,
-                                                          )
-                                                          .toList(),
-                                                      domainX:
-                                                          (_filteredDomainX ??
-                                                          _domainX),
-                                                      domainY:
-                                                          (_filteredDomainY ??
-                                                          _domainY),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            // if there is a selection
-                                            if (_currentSelectionNormalized !=
-                                                null)
-                                              Positioned(
-                                                left:
-                                                    leftPad +
-                                                    _currentSelectionNormalized![0] *
-                                                        usableWidth,
-                                                top: 0,
-                                                bottom: 0,
-                                                width:
-                                                    (_currentSelectionNormalized![1] -
-                                                        _currentSelectionNormalized![0]) *
-                                                    usableWidth,
-                                                child: IgnorePointer(
-                                                  child: Container(
-                                                    color: Colors.grey
-                                                        .withAlpha(64),
-                                                  ),
-                                                ),
-                                              ),
-                                          ],
-                                        ),
+                                      return chartArea(
+                                        usableWidth: usableWidth,
+                                        leftPad: leftPad,
+                                        visibilityKey: visibilityKey,
+                                        variables: variables,
                                       );
                                     },
                                   ),
@@ -930,7 +1032,7 @@ class _ChartState extends State<Chart> {
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-          if (trace.mode.contains('lines'))
+          if (trace.mode.toString().contains('lines'))
             CustomPaint(
               size: const Size(40, 2),
               painter: _LegendLinePainter(
@@ -941,7 +1043,7 @@ class _ChartState extends State<Chart> {
                 ),
               ),
             ),
-          if (trace.mode.contains('markers'))
+          if (trace.mode.toString().contains('markers'))
             Container(
               width: 8,
               height: 8,

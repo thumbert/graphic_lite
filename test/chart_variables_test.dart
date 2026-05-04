@@ -32,7 +32,11 @@ void main() {
         final data = [
           {'x': 1, 'y': 1.0, 'name': 'A', 'marker': null},
         ];
-        final vars = buildChartVariables(data, domainY: kDomainY);
+        final vars = buildChartVariables(
+          data,
+          domainY: kDomainY,
+          includeYFill: true,
+        );
         expect(
           vars.keys,
           containsAll(['x', 'y', 'y_fill', 'name', 'text', 'marker.size']),
@@ -43,12 +47,29 @@ void main() {
         final data = [
           {'x': 1, 'y': 1.0, 'name': 'A', 'marker': null},
         ];
-        final vars = buildChartVariables(data, domainY: kDomainY);
+        final vars = buildChartVariables(
+          data,
+          domainY: kDomainY,
+          includeYFill: true,
+        );
         expect(vars.length, equals(6));
       });
 
+      test('returns exactly five keys when includeYFill is false', () {
+        final data = [
+          {'x': 1, 'y': 1.0, 'name': 'A', 'marker': null},
+        ];
+        final vars = buildChartVariables(data, domainY: kDomainY);
+        expect(vars.length, equals(5));
+        expect(vars.containsKey('y_fill'), isFalse);
+      });
+
       test('works with an empty data list', () {
-        final vars = buildChartVariables([], domainY: kDomainY);
+        final vars = buildChartVariables(
+          [],
+          domainY: kDomainY,
+          includeYFill: true,
+        );
         expect(
           vars.keys,
           containsAll(['x', 'y', 'y_fill', 'name', 'text', 'marker.size']),
@@ -182,7 +203,11 @@ void main() {
         final data = [
           {'x': 1, 'y': 10.0, 'name': 'A', 'marker': null},
         ];
-        final vars = buildChartVariables(data, domainY: kDomainY);
+        final vars = buildChartVariables(
+          data,
+          domainY: kDomainY,
+          includeYFill: true,
+        );
         expect(callAccessor(vars, 'y_fill', data.first), closeTo(0.0, 1e-9));
       });
 
@@ -190,7 +215,11 @@ void main() {
         final data = [
           {'x': 1, 'y': 10.0, 'y_fill': 5.0, 'name': 'A', 'marker': null},
         ];
-        final vars = buildChartVariables(data, domainY: kDomainY);
+        final vars = buildChartVariables(
+          data,
+          domainY: kDomainY,
+          includeYFill: true,
+        );
         expect(callAccessor(vars, 'y_fill', data.first), closeTo(5.0, 1e-9));
       });
 
@@ -198,7 +227,11 @@ void main() {
         final data = [
           {'x': 1.0, 'y': 50.0, 'name': 'A', 'marker': null},
         ];
-        final vars = buildChartVariables(data, domainY: kDomainY);
+        final vars = buildChartVariables(
+          data,
+          domainY: kDomainY,
+          includeYFill: true,
+        );
         // Both variables must reference the identical scale object.
         expect(vars['y']!.scale, same(vars['y_fill']!.scale));
       });

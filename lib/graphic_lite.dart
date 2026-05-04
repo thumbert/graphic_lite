@@ -1,4 +1,6 @@
 export 'src/defaults.dart';
+export 'src/display/annotation.dart';
+export 'src/display/arrow.dart';
 export 'src/display/colorbar.dart';
 export 'src/display/enums.dart';
 export 'src/display/legend.dart';

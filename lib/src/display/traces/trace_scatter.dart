@@ -16,7 +16,7 @@ class ScatterTrace<D, R> extends Trace<D, R> {
     required List<R> y,
     String? name,
     List<String>? text,
-    String? mode,
+    ScatterMode? mode,
     List<Marker>? marker,
     Line? line,
     bool showLegend = true,
@@ -29,7 +29,7 @@ class ScatterTrace<D, R> extends Trace<D, R> {
     this.showLegend = showLegend;
     assert(x.length == y.length);
     this.mode = mode ?? defaultMode;
-    if (this.mode.contains('markers')) {
+    if (this.mode.toString().contains('markers')) {
       if (marker != null) {
         assert(marker.length == 1 || marker.length == x.length);
       } else {
@@ -39,7 +39,7 @@ class ScatterTrace<D, R> extends Trace<D, R> {
     } else {
       this.marker = null;
     }
-    if (this.mode.contains('lines')) {
+    if (this.mode.toString().contains('lines')) {
       this.line = line ?? Line();
     } else {
       this.line = null;
@@ -60,13 +60,13 @@ class ScatterTrace<D, R> extends Trace<D, R> {
   /// Determines the drawing mode for this scatter trace. If the provided `mode`
   /// includes "text" then the `text` elements appear at the coordinates.
   /// Otherwise, the `text` elements appear on hover.
-  late final String mode;
+  late final ScatterMode mode;
 
   /// If there are less than 20 points and the trace is not stacked then the
   /// default is "lines+markers".  Otherwise, "lines".
-  String get defaultMode {
-    if (y.length < 20) return 'lines+markers';
-    return 'lines';
+  ScatterMode get defaultMode {
+    if (y.length < 20) return ScatterMode.linesMarkers;
+    return ScatterMode.lines;
   }
 
   /// A list with only one element means that the value applies to all

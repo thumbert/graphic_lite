@@ -5,20 +5,20 @@ Chart simpleScatterPlot() {
     ScatterTrace(
       x: [1, 2, 3, 4],
       y: [10, 15, 13, 17],
-      mode: 'markers',
+      mode: .markers,
       name: 'Points',
     ),
     ScatterTrace(
       x: [2, 3, 4, 5],
       y: [16, 5, 11, 9],
-      mode: 'lines',
+      mode: .lines,
       line: Line(dash: .dotted),
       name: 'Line',
     ),
     ScatterTrace(
       x: [1, 2, 3, 4],
       y: [12, 9, 15, 12],
-      mode: 'lines+markers',
+      mode: .linesMarkers,
       name: 'Points and Line',
     ),
   ];

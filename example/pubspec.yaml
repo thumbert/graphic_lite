@@ -38,7 +38,9 @@ flutter:
     - lib/examples/area_chart.dart
     - lib/examples/basic_bar_chart.dart
     - lib/examples/data_labels_on_hover.dart
+    - lib/examples/grouped_bar_chart.dart
     - lib/examples/simple_scatter_plot.dart
+    - lib/examples/stacked_bar_chart.dart
 
 
 

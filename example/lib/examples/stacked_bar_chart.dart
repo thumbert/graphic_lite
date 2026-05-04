@@ -1,6 +1,6 @@
 import 'package:graphic_lite/graphic_lite.dart';
-/// https://plotly.com/javascript/bar-charts/#grouped-bar-chart
-Chart groupedBarChart() {
+/// https://plotly.com/javascript/bar-charts/#stacked-bar-chart
+Chart stackedBarChart() {
   final traces = [
     BarTrace(
       x: ['giraffes', 'orangutans', 'monkeys'],
@@ -14,7 +14,7 @@ Chart groupedBarChart() {
     ),
   ];
   final layout = Layout(
-    barMode: .group,
+    barMode: .stack,
   );
 
   return Chart(traces: traces, layout: layout);

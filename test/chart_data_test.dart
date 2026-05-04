@@ -169,7 +169,7 @@ void main() {
     // --------------------------------------------------------------- marker
     group('marker field', () {
       test('marker is null when trace has no marker (lines-only mode)', () {
-        final trace = ScatterTrace(x: [1, 2], y: [1, 2], mode: 'lines');
+        final trace = ScatterTrace(x: [1, 2], y: [1, 2], mode: .lines);
         final result = buildChartData([trace]);
         expect(result.data[0]['marker'], isNull);
       });
@@ -179,7 +179,7 @@ void main() {
         final trace = ScatterTrace(
           x: [1, 2, 3],
           y: [1, 2, 3],
-          mode: 'markers',
+          mode: .markers,
           marker: [m],
         );
         final result = buildChartData([trace]);
@@ -195,7 +195,7 @@ void main() {
         final trace = ScatterTrace(
           x: [1, 2, 3],
           y: [1, 2, 3],
-          mode: 'markers',
+          mode: .markers,
           marker: [m0, m1, m2],
         );
         final result = buildChartData([trace]);

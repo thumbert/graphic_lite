@@ -1,4 +1,5 @@
 import 'package:graphic_lite/src/display/enums.dart';
+import 'package:graphic_lite/src/display/layout.dart';
 import 'package:graphic_lite/src/display/traces/trace.dart';
 import 'package:graphic_lite/src/display/traces/trace_bar.dart';
 import 'package:graphic_lite/src/display/traces/trace_scatter.dart';
@@ -10,6 +11,7 @@ class ChartDataResult {
     required this.xIsDateTime,
     required this.domainX,
     required this.domainY,
+    required this.hasFill,
   });
 
   /// The data list in the format expected by package `graphic`.
@@ -23,13 +25,30 @@ class ChartDataResult {
 
   /// The full y-axis domain, including 10 % margins.
   final (num, num) domainY;
+
+  /// Whether any [ScatterTrace] has a non-null, non-[Fill.none] fill that
+  /// requires the `y_fill` variable and [AreaMark] to be present.
+  final bool hasFill;
 }
 
 /// Pure function that converts a list of [traces] into the flat data format
 /// expected by package `graphic`, and computes x/y axis domains.
 ///
+/// [layout] is the chart layout configuration. When [Layout.barMode] is
+/// [BarMode.stack], the y-axis domain is based on per-category stacked totals
+/// rather than individual bar values.
+///
 /// This is the testable core of `_ChartState.makeData`.
-ChartDataResult buildChartData(List<Trace> traces) {
+ChartDataResult buildChartData(List<Trace> traces, {Layout? layout}) {
+  final barMode = layout?.barMode;
+  // Determine whether any scatter trace needs area fill.
+  final hasFill = traces.any(
+    (t) =>
+        t is ScatterTrace &&
+        t.fill != Fill.none &&
+        t.visible != TraceVisibility.off,
+  );
+
   // Pre-compute y_fill for toNextY traces: map from x value → previous trace's y.
   final fillYMaps = <int, Map<Object, double>>{};
   for (var i = 0; i < traces.length; i++) {
@@ -57,6 +76,21 @@ ChartDataResult buildChartData(List<Trace> traces) {
   DateTime? maxDt;
   final data = <Map<String, dynamic>>[];
 
+  // For stacked bars, accumulate per-category sums to find the true y range.
+  final stackedSums = <Object, double>{};
+  if (barMode == BarMode.stack) {
+    for (final trace in traces) {
+      if (trace is! BarTrace || trace.visible == TraceVisibility.off) continue;
+      for (var j = 0; j < trace.x.length; j++) {
+        final xKey = trace.x[j];
+        final yVal = trace.y[j];
+        if (yVal is num) {
+          stackedSums[xKey] = (stackedSums[xKey] ?? 0.0) + yVal.toDouble();
+        }
+      }
+    }
+  }
+
   for (var i = 0; i < traces.length; i++) {
     final trace = traces[i];
     if (trace.visible == TraceVisibility.off) continue;
@@ -74,7 +108,8 @@ ChartDataResult buildChartData(List<Trace> traces) {
         if (yVal < minYNum) minYNum = yVal.toDouble();
         if (yVal > maxYNum) maxYNum = yVal.toDouble();
       }
-      final yFill = (trace is ScatterTrace && trace.fill == Fill.toNextY)
+      final needsFill = trace is ScatterTrace && trace.fill != Fill.none;
+      final yFill = needsFill && trace.fill == Fill.toNextY
           ? (fillYMaps[i]?[trace.x[j]])
           : null;
       final markerForPoint = switch (trace) {
@@ -87,13 +122,10 @@ ChartDataResult buildChartData(List<Trace> traces) {
       data.add({
         'x': trace.x[j],
         'y': trace.y[j],
-        // if (trace is ScatterTrace && trace.fill != Fill.none) 'y_fill': yFill,
-        'y_fill': yFill,
+        if (needsFill) 'y_fill': yFill,
         'name': trace.name ?? 'trace $i',
         if (trace.text != null)
-          'text': trace.text!.length == 1
-              ? trace.text!.first
-              : trace.text![j],
+          'text': trace.text!.length == 1 ? trace.text!.first : trace.text![j],
         'marker': markerForPoint,
       });
     }
@@ -114,10 +146,15 @@ ChartDataResult buildChartData(List<Trace> traces) {
     final xRange = maxXNum == minXNum ? 10.0 : maxXNum - minXNum;
     domainX = (minXNum - 0.1 * xRange, maxXNum + 0.1 * xRange);
   }
+  if (stackedSums.isNotEmpty) {
+    minYNum = 0.0;
+    maxYNum = stackedSums.values.reduce((a, b) => a > b ? a : b);
+  }
   final yRange = maxYNum == minYNum ? 10.0 : maxYNum - minYNum;
   domainY = (minYNum - 0.1 * yRange, maxYNum + 0.1 * yRange);
 
   return ChartDataResult(
+    hasFill: hasFill,
     data: data,
     xIsDateTime: xIsDateTime,
     domainX: domainX,

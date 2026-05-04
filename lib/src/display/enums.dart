@@ -1,3 +1,4 @@
+
 enum AlignmentPlotly {
   start('start'),
   middle('middle'),
@@ -31,6 +32,24 @@ enum AngleRef {
     };
   }
 }
+
+enum ArrowSide {
+  both,
+  end,
+  none,
+  start;
+
+  static ArrowSide parse(String value) {
+    return switch (value) {
+      'end' => ArrowSide.end,
+      'start' => ArrowSide.start,
+      'both' => ArrowSide.both,
+      'none' => ArrowSide.none,
+      _ => throw ArgumentError('Invalid value $value for PlotlyArrowSide'),
+    };
+  }
+}
+
 
 enum AutoRange {
   yes('true'),
@@ -78,6 +97,23 @@ enum AxisType {
       'date' => AxisType.date,
       'category' => AxisType.category,
       _ => throw ArgumentError('Invalid value $value for PlotlyAxisType'),
+    };
+  }
+}
+
+enum BarMode {
+  group,
+  stack,
+  relative,
+  overlay;
+
+  static BarMode parse(String value) {
+    return switch (value) {
+      'group' => BarMode.group,
+      'stack' => BarMode.stack,
+      'relative' => BarMode.relative,
+      'overlay' => BarMode.overlay,
+      _ => throw ArgumentError('Invalid value $value for PlotlyBarMode'),
     };
   }
 }
@@ -190,6 +226,37 @@ enum RangeMode {
   }
 }
 
+
+enum ScatterMode {
+  lines,
+  markers,
+  text,
+  linesMarkers('lines+markers'),
+  linesText('lines+text'),
+  markersText('markers+text'),
+  linesMarkersText('lines+markers+text');
+
+  const ScatterMode([this._value]);
+  final String? _value;
+
+  static ScatterMode parse(String value) {
+    return switch (value) {
+      'lines' => ScatterMode.lines,
+      'markers' => ScatterMode.markers,
+      'text' => ScatterMode.text,
+      'lines+markers' => ScatterMode.linesMarkers,
+      'lines+text' => ScatterMode.linesText,
+      'markers+text' => ScatterMode.markersText,
+      'lines+markers+text' => ScatterMode.linesMarkersText,
+      _ => throw ArgumentError('Invalid value $value for PlotlyScatterMode'),
+    };
+  }
+
+  @override
+  String toString() => _value ?? name;
+}
+
+
 /// Determines whether a x (y) axis is positioned at the "bottom" ("left") or
 /// "top" ("right") of the plotting area.
 enum Side {
@@ -245,4 +312,38 @@ enum TraceVisibility {
 
   @override
   String toString() => _value;
+}
+
+enum XAnchor {
+  auto,
+  left,
+  center,
+  right;
+
+  static XAnchor parse(String value) {
+    return switch (value) {
+      'auto' => XAnchor.auto,
+      'left' => XAnchor.left,
+      'center' => XAnchor.center,
+      'right' => XAnchor.right,
+      _ => throw ArgumentError('Invalid value $value for PlotlyAnchor'),
+    };
+  }
+}
+
+enum YAnchor {
+  auto,
+  top,
+  middle,
+  bottom;
+
+  static YAnchor parse(String value) {
+    return switch (value) {
+      'auto' => YAnchor.auto,
+      'top' => YAnchor.top,
+      'middle' => YAnchor.middle,
+      'bottom' => YAnchor.bottom,
+      _ => throw ArgumentError('Invalid value $value for PlotlyAnchor'),
+    };
+  }
 }

@@ -17,14 +17,11 @@ enum TraceOrder { normal, reversed, grouped, groupedReversed }
 
 enum VerticalAlignment { top, middle, bottom }
 
-enum XAnchor { auto, left, center, right }
-
 /// Coordinate system for x and y position. [container] spans the entire
 /// `width` and `height` of the plot. [paper] refers to the width and height
 /// of the plotting area only.
 enum Ref { container, paper }
 
-enum YAnchor { auto, top, middle, bottom }
 
 /// See https://plotly.com/javascript/reference/layout/#layout-legend
 class Legend {

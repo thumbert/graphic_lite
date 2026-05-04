@@ -1,10 +1,14 @@
+import 'package:graphic_lite/src/display/annotation.dart';
+
 import 'legend.dart';
 import 'margin.dart';
 import 'shape.dart';
 import 'title.dart';
 import 'x_axis.dart';
 import 'y_axis.dart';
+import 'enums.dart';
 
+/// See https://plotly.com/javascript/reference/layout/
 class Layout {
   Layout({
     this.legend,
@@ -14,7 +18,11 @@ class Layout {
     this.margin,
     this.hoverMode,
     this.shapes,
+    this.annotations,
     this.showLegend = true,
+    this.barMode,
+    this.barGroupGap = 0,
+    this.barGap = 0.2,
   }) {
     if (title == null || title?.text == '') {
       margin ??= Margin();
@@ -30,6 +38,16 @@ class Layout {
   YAxis? yAxis;
   Margin? margin;
   List<Shape>? shapes;
+  List<Annotation>? annotations;
+
+  BarMode? barMode;
+
+  /// Sets the gap (in plot fraction) between bars of the same location coordinate.
+  num barGroupGap = 0;
+
+  ///   Type: number between or equal to 0 and 1
+  /// Sets the gap (in plot fraction) between bars of adjacent location coordinates.
+  num barGap = 0.2;
 
   static Layout getDefault() => Layout();
 

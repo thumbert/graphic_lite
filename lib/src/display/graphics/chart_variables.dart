@@ -9,6 +9,10 @@ import 'package:graphic_lite/src/display/marker.dart';
 /// [domainY] — the y-axis domain used to build a shared scale for `y` and
 ///   `y_fill` (those two must reference the identical scale object to satisfy
 ///   the graphic library's `PositionEncoderOp` assertion).
+/// [includeYFill] — when true, a `y_fill` variable sharing the same scale as
+///   `y` is emitted. Set this only when at least one [ScatterTrace] has a
+///   non-null, non-[Fill.none] fill (i.e. when [ChartDataResult.hasFill] is
+///   true).
 ///
 /// x/y types are inferred from the first element of [data]; an empty list
 /// returns a map with accessor-only (no-scale) variables.
@@ -16,6 +20,7 @@ Map<String, g.Variable<Map<dynamic, dynamic>, dynamic>> buildChartVariables(
   List<Map<String, dynamic>> data, {
   (num, num)? domainX,
   required (num, num) domainY,
+  bool includeYFill = false,
 }) {
   final out = <String, g.Variable<Map<dynamic, dynamic>, dynamic>>{};
 
@@ -65,10 +70,12 @@ Map<String, g.Variable<Map<dynamic, dynamic>, dynamic>> buildChartVariables(
       scale: yScale as g.Scale<num, num>,
     ),
   };
-  out['y_fill'] = g.Variable(
-    accessor: (Map map) => (map['y_fill'] ?? 0.0) as num,
-    scale: yScale, // identical instance — required by graphic
-  );
+  if (includeYFill) {
+    out['y_fill'] = g.Variable(
+      accessor: (Map map) => (map['y_fill'] ?? 0.0) as num,
+      scale: yScale, // identical instance — required by graphic
+    );
+  }
 
   // ── auxiliary variables ───────────────────────────────────────────────────
   out['name'] = g.Variable(accessor: (Map e) => e['name'] as String);
