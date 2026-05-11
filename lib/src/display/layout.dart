@@ -1,5 +1,6 @@
 import 'package:graphic_lite/src/display/annotation.dart';
 
+import 'grid.dart';
 import 'legend.dart';
 import 'margin.dart';
 import 'shape.dart';
@@ -14,7 +15,14 @@ class Layout {
     this.legend,
     this.title,
     this.xAxis,
+    this.xAxis2,
+    this.xAxis3,
+    this.xAxis4,
     this.yAxis,
+    this.yAxis2,
+    this.yAxis3,
+    this.yAxis4,
+    this.grid,
     this.margin,
     this.hoverMode,
     this.shapes,
@@ -35,7 +43,14 @@ class Layout {
   Legend? legend;
   Title? title;
   XAxis? xAxis;
+  XAxis? xAxis2;
+  XAxis? xAxis3;
+  XAxis? xAxis4;
   YAxis? yAxis;
+  YAxis? yAxis2;
+  YAxis? yAxis3;
+  YAxis? yAxis4;
+  Grid? grid;
   Margin? margin;
   List<Shape>? shapes;
   List<Annotation>? annotations;

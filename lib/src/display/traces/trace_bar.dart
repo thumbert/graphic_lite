@@ -15,6 +15,8 @@ class BarTrace<D, R> extends Trace<D, R> {
     List<String>? text,
     List<Marker>? marker,
     bool showLegend = true,
+    this.xAxis = 'x',
+    this.yAxis = 'y',
   }) {
     this.x = x;
     this.y = y;

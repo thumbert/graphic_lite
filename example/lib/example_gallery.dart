@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart' hide Title;
 import 'package:flutter/services.dart';
+import 'package:gallery/examples/line_chart_bar_chart.dart';
+import 'package:gallery/examples/two_y_axes.dart';
 import 'package:syntax_highlight/syntax_highlight.dart';
 
 import 'examples/area_chart.dart';
@@ -14,10 +16,7 @@ late final Highlighter _dartLightHighlighter;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Initialize the highlighter.
   await Highlighter.initialize(['dart']);
-
-  // Load the default light theme and create a highlighter.
   var lightTheme = await HighlighterTheme.loadLightTheme();
   _dartLightHighlighter = Highlighter(language: 'dart', theme: lightTheme);
 
@@ -50,53 +49,47 @@ class MyHomePage extends StatefulWidget {
 
 // https://plotly.com/javascript/line-and-scatter/
 class GalleryCharts extends State<MyHomePage> {
-  int _selectedIndex = 0;
-  final List<String> _source = List.filled(_navItems.length, '');
+  String _selectedTitle = _navItems[0].$1;
+  final Map<String, String> _source = {};
 
   @override
   void initState() {
     super.initState();
-    rootBundle
-        .loadString('lib/examples/simple_scatter_plot.dart')
-        .then((src) => setState(() => _source[0] = src));
-    rootBundle
-        .loadString('lib/examples/data_labels_on_hover.dart')
-        .then((src) => setState(() => _source[1] = src));
-    rootBundle
-        .loadString('lib/examples/area_chart.dart')
-        .then((src) => setState(() => _source[2] = src));
-    rootBundle
-        .loadString('lib/examples/basic_bar_chart.dart')
-        .then((src) => setState(() => _source[3] = src));
-    rootBundle
-        .loadString('lib/examples/stacked_bar_chart.dart')
-        .then((src) => setState(() => _source[4] = src));
-    rootBundle
-        .loadString('lib/examples/grouped_bar_chart.dart')
-        .then((src) => setState(() => _source[5] = src));
-    rootBundle
-        .loadString('lib/examples/simple_text_annotation.dart')
-        .then((src) => setState(() => _source[6] = src));
+    for (var i = 0; i < _navItems.length; i++) {
+      rootBundle
+          .loadString('lib/examples/${_navItems[i].$2}')
+          .then((src) => setState(() => _source[_navItems[i].$1] = src));
+    }
   }
 
   static const _navItems = [
-    'Simple Scatter Plot',
-    'Data Labels on Hover',
-    'Area Chart',
-    'Basic Bar Chart',
-    'Stacked Bar Chart',
-    'Grouped Bar Chart',
-    'Simple Text Annotation',
+    ('Simple Scatter Plot', 'simple_scatter_plot.dart'),
+    ('Data Labels on Hover', 'data_labels_on_hover.dart'),
+    ('Two Y Axes', 'two_y_axes.dart'),
+    ('Area Chart', 'area_chart.dart'),
+    ('Basic Bar Chart', 'basic_bar_chart.dart'),
+    ('Stacked Bar Chart', 'stacked_bar_chart.dart'),
+    ('Grouped Bar Chart', 'grouped_bar_chart.dart'),
+    ('Line Chart and Bar Chart', 'line_chart_bar_chart.dart'),
+    ('Simple Text Annotation', 'simple_text_annotation.dart'),
   ];
 
+  String extractContent(String src) {
+    final lines = src.split('\n');
+    final index = lines.indexWhere((line) => line.startsWith('Chart'));
+    return lines.skip(index).join('\n');
+  }
+
   Widget _buildContent() {
-    var highlightedCode = _dartLightHighlighter.highlight(
-      _source[_selectedIndex].split('\n').skip(2).join('\n'),
-    );
+    final src = _source[_selectedTitle];
+    if (src == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    var highlightedCode = _dartLightHighlighter.highlight(extractContent(src));
     List<Widget> widgets = [];
 
-    switch (_selectedIndex) {
-      case 0:
+    switch (_selectedTitle) {
+      case 'Simple Scatter Plot':
         widgets = [
           SizedBox(width: 800, height: 500, child: simpleScatterPlot()),
           const SizedBox(height: 24),
@@ -105,7 +98,7 @@ class GalleryCharts extends State<MyHomePage> {
           Text('Use the mouse to select an area on the chart to zoom in.'),
         ];
         break;
-      case 1:
+      case 'Data Labels on Hover':
         widgets = [
           SizedBox(width: 800, height: 500, child: dataLabelsOnHover()),
           const SizedBox(height: 24),
@@ -113,19 +106,27 @@ class GalleryCharts extends State<MyHomePage> {
           Text('Note how to define the rectangular blue shape in the layout.'),
         ];
         break;
-      case 2:
+      case 'Two Y Axes':
+        widgets = [SizedBox(width: 800, height: 500, child: twoYAxes())];
+        break;
+      case 'Area Chart':
         widgets = [SizedBox(width: 800, height: 500, child: areaChart())];
         break;
-      case 3:
+      case 'Basic Bar Chart':
         widgets = [SizedBox(width: 800, height: 500, child: basicBarChart())];
         break;
-      case 4:
+      case 'Stacked Bar Chart':
         widgets = [SizedBox(width: 800, height: 500, child: stackedBarChart())];
         break;
-      case 5:
+      case 'Grouped Bar Chart':
         widgets = [SizedBox(width: 800, height: 500, child: groupedBarChart())];
         break;
-      case 6:
+      case 'Line Chart and Bar Chart':
+        widgets = [
+          SizedBox(width: 800, height: 500, child: lineChartAndBarChart()),
+        ];
+        break;
+      case 'Simple Text Annotation':
         widgets = [
           SizedBox(width: 800, height: 500, child: simpleTextAnnotation()),
         ];
@@ -173,7 +174,7 @@ class GalleryCharts extends State<MyHomePage> {
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 itemCount: _navItems.length,
                 itemBuilder: (context, index) {
-                  final selected = index == _selectedIndex;
+                  final selected = _navItems[index].$1 == _selectedTitle;
                   return Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -196,8 +197,9 @@ class GalleryCharts extends State<MyHomePage> {
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                      onPressed: () => setState(() => _selectedIndex = index),
-                      child: Text(_navItems[index]),
+                      onPressed: () =>
+                          setState(() => _selectedTitle = _navItems[index].$1),
+                      child: Text(_navItems[index].$1),
                     ),
                   );
                 },

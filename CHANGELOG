@@ -1,12 +1,21 @@
 
 TODO: 
- - Implement y2 axis
  - Improve the README.  Write the package manifesto.  Show short video animations 
    of functionality.
  - Add example of various line types
  - Experiment with chart reactivity    
  - Consider writing golden tests?  
  - Implement explicit widths for bar traces using the width argument in the trace data.
+ - Have multiple plots on the same chart, for example how the nodal marks chart looks 
+   in isone_nodal_marks/ docs.
+
+# 2026-05-10
+ - Fixed tooltip for the combined line and bar chart example.  It now shows the  
+   the correct info on mouse hover
+ - Implement secondary y axis in Layout.  Showcase example: 'Two Y Axes'
+ - Changed the example_gallery.dart to refer to the examples by title not by 
+   index.  This should make it easy to move examples around, add other ones, etc.
+ - Implemented a grid field for Layout.  Example of subplots coming soon.  
 
 # 2026-05-03
  - Implement layout.barMode for grouped/stacked bars. 

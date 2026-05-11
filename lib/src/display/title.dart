@@ -1,11 +1,14 @@
+import 'package:flutter/widgets.dart';
+
 import 'layout.dart';
 
 class Title {
-  Title(this.text);
+  Title(this.text, {this.style});
 
   final String text;
+  final TextStyle? style;
   bool autoMargin = true;
-  PlotlyFont? font;
+  // PlotlyFont? font;
   num x = 0.5;
   AnchorXTitle? anchorX;
   RefPosition? xRef;
@@ -21,7 +24,7 @@ class Title {
     var title = Title('');
     if (x.containsKey('text')) title = Title(x['text']);
     if (x.containsKey('automargin')) title.autoMargin = x['automargin'];
-    if (x.containsKey('font')) title.font = PlotlyFont.fromJson(x['font']);
+    // if (x.containsKey('font')) title.font = PlotlyFont.fromJson(x['font']);
     if (x.containsKey('x')) title.x = x['x'];
 
     /// TODO: continue me
@@ -30,9 +33,9 @@ class Title {
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
-      if (text != '') 'text': text,
+      // if (text != '') 'text': text,
       if (!autoMargin) 'automargin': autoMargin,
-      if (font != null) 'font': font!.toJson(),
+      // if (font != null) 'font': font!.toJson(),
       if (x != 0.5) 'x': x,
       if (anchorX != AnchorXTitle.auto) 'xanchor': anchorX.toString(),
       if (xRef != RefPosition.container) 'xref': xRef.toString(),
@@ -55,7 +58,7 @@ class Title {
   }) {
     var title = Title(text ?? this.text)
       ..autoMargin = (autoMargin ?? true)
-      ..font = font
+      // ..font = font
       ..x = (x ?? 0.5)
       ..anchorX = anchorX
       ..xRef = xRef

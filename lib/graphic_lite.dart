@@ -3,6 +3,7 @@ export 'src/display/annotation.dart';
 export 'src/display/arrow.dart';
 export 'src/display/colorbar.dart';
 export 'src/display/enums.dart';
+export 'src/display/grid.dart';
 export 'src/display/legend.dart';
 export 'src/display/line.dart';
 export 'src/display/layout.dart';

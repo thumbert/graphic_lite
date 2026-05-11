@@ -230,6 +230,17 @@ class _ChartState extends State<Chart> {
   late (num, num) _domainX;
   late (num, num) _domainY;
 
+  /// Y domain for the secondary (y2) axis. Only valid when [_hasSecondaryYAxis].
+  late (num, num) _domainY2;
+
+  /// Flattened data for secondary-axis traces (those with yAxis == 'y2').
+  List<Map<String, dynamic>> _dataSecondary = [];
+
+  /// True when the layout defines a secondary y-axis and at least one trace
+  /// is assigned to it.
+  bool get _hasSecondaryYAxis =>
+      widget.layout.yAxis2 != null && widget.traces.any((t) => t.yAxis == 'y2');
+
   (num, num) _computeYDomainFromData(List<Map<String, dynamic>> points) {
     var minY = double.infinity;
     var maxY = double.negativeInfinity;
@@ -248,13 +259,44 @@ class _ChartState extends State<Chart> {
   ///
   /// Delegates to [buildChartData] and updates the domain/type fields as a
   /// side effect so the rest of the widget can reference them.
+  ///
+  /// When a secondary y-axis is present, primary and secondary traces are
+  /// split so each gets its own y domain. [_dataSecondary] is populated with
+  /// the secondary trace data points.
   List<Map<String, dynamic>> makeData(List<Trace> traces) {
-    final result = buildChartData(traces, layout: widget.layout);
-    _xIsDateTime = result.xIsDateTime;
-    _domainX = result.domainX;
-    _domainY = result.domainY;
-    _hasFill = result.hasFill;
-    return result.data;
+    if (_hasSecondaryYAxis) {
+      final primaryTraces = traces.where((t) => t.yAxis != 'y2').toList();
+      final secondaryTraces = traces.where((t) => t.yAxis == 'y2').toList();
+
+      // Use all traces to establish the shared x domain.
+      final allResult = buildChartData(traces, layout: widget.layout);
+      _xIsDateTime = allResult.xIsDateTime;
+      _domainX = allResult.domainX;
+
+      final primaryResult = buildChartData(
+        primaryTraces,
+        layout: widget.layout,
+      );
+      _domainY = primaryResult.domainY;
+      _hasFill = primaryResult.hasFill;
+
+      final secondaryResult = buildChartData(
+        secondaryTraces,
+        layout: widget.layout,
+      );
+      _domainY2 = secondaryResult.domainY;
+      _dataSecondary = secondaryResult.data;
+
+      return primaryResult.data;
+    } else {
+      final result = buildChartData(traces, layout: widget.layout);
+      _xIsDateTime = result.xIsDateTime;
+      _domainX = result.domainX;
+      _domainY = result.domainY;
+      _hasFill = result.hasFill;
+      _dataSecondary = [];
+      return result.data;
+    }
   }
 
   /// Variables for the chart as needed by package `graphic`.
@@ -270,10 +312,155 @@ class _ChartState extends State<Chart> {
   }) {
     return buildChartVariables(
       data,
-      domainX: domainX,
+      domainX: domainX ?? _domainX,
       domainY: domainY ?? _domainY,
       includeYFill: _hasFill,
     );
+  }
+
+  /// Variables for the secondary y-axis chart.
+  ///
+  /// Always uses an explicit x domain equal to the primary chart's x domain so
+  /// both charts' plot areas stay perfectly aligned.
+  Map<String, g.Variable<Map<dynamic, dynamic>, dynamic>>
+  makeVariablesSecondary(List<Map<String, dynamic>> data) {
+    return buildChartVariables(
+      data,
+      domainX: _filteredDomainX ?? _domainX,
+      domainY: _domainY2,
+    );
+  }
+
+  /// Returns true if [_hoverLocalPosition] is inside the canvas rectangle of
+  /// the bar identified by [traceName] and [xVal] for the given chart [size].
+  ///
+  /// Handles all [BarMode]s:
+  ///   - single / stack : bar is centred on its category band.
+  ///   - group          : bar position is offset by the dodge geometry.
+  ///   - stack          : y bounds are the cumulative stacked range.
+  bool _isCursorOverBar(String traceName, Object xVal, Size size) {
+    final barTraces = widget.traces.whereType<BarTrace>().toList();
+    if (barTraces.isEmpty) return false;
+
+    const leftPad = 40.0, rightPad = 10.0, topPad = 5.0, bottomPad = 40.0;
+    final plotW = size.width - leftPad - rightPad;
+    final plotH = size.height - topPad - bottomPad;
+
+    // Build ordered category list.
+    final categories = <Object>[];
+    for (final trace in barTraces) {
+      for (final xv in trace.x) {
+        if (!categories.contains(xv)) categories.add(xv);
+      }
+    }
+    final nCategories = categories.length;
+    final nGroups = barTraces.length;
+    final barGap = widget.layout.barGap.toDouble();
+    final barGroupGap = widget.layout.barGroupGap.toDouble();
+    final barMode = widget.layout.barMode;
+
+    final c = categories.indexOf(xVal);
+    if (c < 0) return false;
+
+    final band = 1.0 / nCategories;
+    final catNormX = (c + 0.5) * band;
+
+    // ── canvas x bounds ───────────────────────────────────────────────────
+    final double barNormX;
+    final double barHalfWidthNorm;
+    if (barMode == BarMode.group) {
+      final traceIdx = barTraces.indexWhere((t) => (t.name ?? '') == traceName);
+      if (traceIdx < 0) return false;
+      final ratio = (1 - barGap) / nGroups;
+      final bias = ratio * band;
+      final accumulatedStart = -bias * (nGroups - 1) / 2.0;
+      barNormX = catNormX + accumulatedStart + traceIdx * bias;
+      barHalfWidthNorm = (1 - barGroupGap) * bias / 2.0;
+    } else {
+      barNormX = catNormX;
+      barHalfWidthNorm = (1 - barGap) * band / 2.0;
+    }
+    final barCanvasX = leftPad + barNormX * plotW;
+    final barHalfWidthPx = barHalfWidthNorm * plotW;
+    if ((_hoverLocalPosition.dx - barCanvasX).abs() > barHalfWidthPx) {
+      return false;
+    }
+
+    // ── canvas y bounds ───────────────────────────────────────────────────
+    final barTrace = barTraces.firstWhere(
+      (t) => (t.name ?? '') == traceName,
+      orElse: () => barTraces.first,
+    );
+    final idx = barTrace.x.indexWhere((v) => v == xVal);
+    if (idx < 0) return false;
+    final barY = (barTrace.y[idx] as num).toDouble();
+
+    double yDataBottom, yDataTop;
+    if (barMode == BarMode.stack) {
+      double cumBottom = 0.0;
+      yDataBottom = 0.0;
+      yDataTop = barY;
+      for (final bt in barTraces) {
+        if (bt.visible == TraceVisibility.off) continue;
+        final btIdx = bt.x.indexWhere((v) => v == xVal);
+        if (btIdx < 0) continue;
+        final btY = (bt.y[btIdx] as num).toDouble();
+        if ((bt.name ?? '') == traceName) {
+          yDataBottom = cumBottom;
+          yDataTop = cumBottom + btY;
+          break;
+        }
+        cumBottom += btY;
+      }
+    } else {
+      yDataBottom = barY < 0 ? barY : 0.0;
+      yDataTop = barY < 0 ? 0.0 : barY;
+    }
+
+    final domainSpan = (_domainY.$2 - _domainY.$1).toDouble();
+    final canvasYTop =
+        topPad + (1.0 - (yDataTop - _domainY.$1) / domainSpan) * plotH;
+    final canvasYBottom =
+        topPad + (1.0 - (yDataBottom - _domainY.$1) / domainSpan) * plotH;
+
+    final cy = _hoverLocalPosition.dy;
+    return cy >= canvasYTop && cy <= canvasYBottom;
+  }
+
+  /// Returns true when [_hoverLocalPosition] is within [testRadius] pixels of
+  /// the canvas coordinates of the scatter point ([xVal], [yVal]).
+  bool _isCursorNearScatterPoint(Object? xVal, Object? yVal, Size size) {
+    const testRadius = 15.0;
+    const leftPad = 40.0;
+    const rightPad = 10.0;
+    const topPad = 5.0;
+    const bottomPad = 40.0;
+    final plotW = size.width - leftPad - rightPad;
+    final plotH = size.height - topPad - bottomPad;
+
+    double xNum;
+    if (xVal is DateTime) {
+      xNum = xVal.microsecondsSinceEpoch.toDouble();
+    } else if (xVal is num) {
+      xNum = xVal.toDouble();
+    } else {
+      return false;
+    }
+    final yNum = yVal is num ? yVal.toDouble() : 0.0;
+
+    final normX = (_domainX.$2 == _domainX.$1)
+        ? 0.5
+        : (xNum - _domainX.$1) / (_domainX.$2 - _domainX.$1);
+    final normY = (_domainY.$2 == _domainY.$1)
+        ? 0.5
+        : (yNum - _domainY.$1) / (_domainY.$2 - _domainY.$1);
+
+    final canvasX = leftPad + normX * plotW;
+    final canvasY = topPad + (1.0 - normY) * plotH;
+
+    final dx = _hoverLocalPosition.dx - canvasX;
+    final dy = _hoverLocalPosition.dy - canvasY;
+    return dx * dx + dy * dy <= testRadius * testRadius;
   }
 
   /// Custom tooltip renderer that colors the tooltip text to match the
@@ -364,11 +551,51 @@ class _ChartState extends State<Chart> {
       } else {
         tuple = selectedTuples.values.first;
       }
+    } else if (widget.traces.any((t) => t is BarTrace) &&
+        widget.traces.any((t) => t is ScatterTrace)) {
+      // Mixed bar+scatter chart: hit-test each type independently and show
+      // the tooltip only for the element the cursor is actually over/near.
+      g.Tuple? barHit;
+      g.Tuple? scatterHit;
+      for (final t in selectedTuples.values) {
+        final n = t['name'] as String;
+        final isBar = widget.traces.whereType<BarTrace>().any(
+          (tr) => (tr.name ?? '') == n,
+        );
+        if (isBar) {
+          if (barHit == null && _isCursorOverBar(n, t['x'] as Object, size)) {
+            barHit = t;
+          }
+        } else {
+          if (scatterHit == null &&
+              _isCursorNearScatterPoint(t['x'], t['y'], size)) {
+            scatterHit = t;
+          }
+        }
+      }
+      if (barHit != null) {
+        tuple = barHit;
+      } else if (scatterHit != null) {
+        tuple = scatterHit;
+      } else {
+        return [];
+      }
     } else {
       tuple = selectedTuples.values.first;
     }
 
     final name = tuple['name'] as String;
+
+    // For pure-bar (non-mixed) charts: hide tooltip when cursor is not over a bar.
+    final isBarTuple = widget.traces.whereType<BarTrace>().any(
+      (t) => (t.name ?? '') == name,
+    );
+    if (isBarTuple &&
+        !widget.traces.any((t) => t is ScatterTrace) &&
+        !_isCursorOverBar(name, tuple['x'] as Object, size)) {
+      return [];
+    }
+
     Color traceColor = const Color(0xff595959);
     for (var i = 0; i < widget.traces.length; i++) {
       final trace = widget.traces[i];
@@ -386,7 +613,10 @@ class _ChartState extends State<Chart> {
         ? '($xStr, $yVal) $name\n$pointText'
         : '($xStr, $yVal) $name';
 
-    final textStyle = TextStyle(color: traceColor, fontSize: 12);
+    final textStyle = TextStyle(
+      color: traceColor,
+      // fontSize: 12,
+    );
     const padding = EdgeInsets.all(5.0);
 
     final painter = TextPainter(
@@ -637,7 +867,10 @@ class _ChartState extends State<Chart> {
                   ? trace.marker!.first.color
                   : null;
               if (mc is Color && mc != Colors.transparent) return mc;
-              return Defaults.colors[i];
+              // Use the global trace index so colors cycle correctly when
+              // BarTraces are mixed with other trace types.
+              final globalIdx = widget.traces.indexOf(trace);
+              return Defaults.colors[globalIdx < 0 ? i : globalIdx];
             }
           }
           return Colors.transparent;
@@ -646,9 +879,86 @@ class _ChartState extends State<Chart> {
     );
   }
 
+  /// Marks for traces rendered on the secondary y-axis.
+  ///
+  /// Only [ScatterTrace]s are supported on the secondary axis (no bars).
+  /// Color resolution uses [widget.traces] so that global trace-index colors
+  /// are applied correctly even when only a subset of traces is passed.
+  List<g.Mark<g.Shape>> _makeSecondaryMarks(List<ScatterTrace> traces) {
+    return [
+      g.LineMark(
+        position: g.Varset('x') * g.Varset('y') / g.Varset('name'),
+        shape: g.ShapeEncode(
+          encoder: (e) => _lineShapeFor(e['name'] as String, traces),
+        ),
+        size: g.SizeEncode(
+          encoder: (e) {
+            for (final trace in traces) {
+              if (trace.visible == TraceVisibility.off) continue;
+              if (trace.name == e['name'] &&
+                  trace.mode.toString().contains('lines')) {
+                return trace.line?.width.toDouble() ?? 2.0;
+              }
+            }
+            return 0.0;
+          },
+        ),
+        color: g.ColorEncode(
+          encoder: (e) {
+            for (var i = 0; i < widget.traces.length; i++) {
+              final trace = widget.traces[i];
+              if (trace.visible == TraceVisibility.off) continue;
+              if (trace.name != e['name']) continue;
+              if (trace is ScatterTrace &&
+                  trace.mode.toString().contains('lines')) {
+                final lineColor = trace.line?.color;
+                if (lineColor is Color && lineColor != Colors.transparent) {
+                  return lineColor;
+                }
+              }
+              return Defaults.colors[i];
+            }
+            return Colors.transparent;
+          },
+        ),
+      ),
+      g.PointMark(
+        color: g.ColorEncode(
+          encoder: (e) {
+            for (var i = 0; i < widget.traces.length; i++) {
+              final trace = widget.traces[i];
+              if (trace.visible == TraceVisibility.off) continue;
+              if (trace.name != e['name']) continue;
+              if (trace is ScatterTrace &&
+                  trace.mode.toString().contains('markers')) {
+                final mc = trace.marker?.first.color;
+                if (mc is Color && mc != Colors.transparent) return mc;
+                return Defaults.colors[i];
+              }
+            }
+            return Colors.transparent;
+          },
+        ),
+        size: g.SizeEncode(
+          encoder: (e) {
+            for (final trace in traces) {
+              if (trace.visible == TraceVisibility.off) continue;
+              if (trace.name == e['name'] &&
+                  trace.mode.toString().contains('markers')) {
+                return e['marker.size'] as double;
+              }
+            }
+            return 0.0;
+          },
+        ),
+      ),
+    ];
+  }
+
   Widget chartArea({
     required double usableWidth,
     required double leftPad,
+    required double rightPad,
     required String visibilityKey,
     required Map<String, g.Variable<Map<dynamic, dynamic>, dynamic>> variables,
   }) {
@@ -674,7 +984,7 @@ class _ChartState extends State<Chart> {
             ),
           g.Chart(
             key: ValueKey(visibilityKey),
-            padding: (_) => const EdgeInsets.fromLTRB(40, 5, 10, 40),
+            padding: (_) => EdgeInsets.fromLTRB(leftPad, 5, rightPad, 40),
             data: _filteredData.isNotEmpty ? _filteredData : data,
             variables: variables,
             marks: makeMarks(widget.traces, chartWidth: usableWidth),
@@ -701,13 +1011,10 @@ class _ChartState extends State<Chart> {
                       on: {g.GestureType.hover},
                       dim: g.Dim.x,
                       nearest: true,
-                      // Select ALL bars in the hovered column so the renderer
-                      // can pick the one actually under the cursor.
-                      variable:
-                          (widget.layout.barMode == BarMode.stack ||
-                              widget.layout.barMode == BarMode.group)
-                          ? 'x'
-                          : null,
+                      // Group by x so ALL traces (bar + scatter) at the
+                      // nearest x column enter selectedTuples.  The renderer
+                      // then decides which one to show.
+                      variable: 'x',
                       devices: {PointerDeviceKind.mouse},
                     )
                   : g.PointSelection(
@@ -720,6 +1027,44 @@ class _ChartState extends State<Chart> {
             tooltip: g.TooltipGuide(renderer: _tooltipRenderer),
             gestureStream: _gestureController,
           ),
+          // Secondary y-axis chart overlay (transparent, right-side axis only).
+          if (_hasSecondaryYAxis && _dataSecondary.isNotEmpty)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: g.Chart(
+                  key: ValueKey('secondary_$visibilityKey'),
+                  padding: (_) => EdgeInsets.fromLTRB(leftPad, 5, rightPad, 40),
+                  data: _dataSecondary,
+                  variables: makeVariablesSecondary(_dataSecondary),
+                  marks: _makeSecondaryMarks(
+                    widget.traces
+                        .whereType<ScatterTrace>()
+                        .where((t) => t.yAxis == 'y2')
+                        .toList(),
+                  ),
+                  coord: g.RectCoord(
+                    horizontalRange: [0, 1],
+                    verticalRange: [0, 1],
+                  ),
+                  axes: [
+                    // x-axis: invisible (primary chart draws the x-axis)
+                    g.AxisGuide(dim: g.Dim.x),
+                    // y-axis: right side, no grid
+                    g.AxisGuide(
+                      dim: g.Dim.y,
+                      position: 1.0,
+                      flip: true,
+                      label: g.LabelStyle(
+                        textStyle: Defaults.textStyle.copyWith(
+                          color: widget.layout.yAxis2?.color ?? Colors.black,
+                        ),
+                        offset: const Offset(7.5, 0),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           // shapes above the chart data
           if (widget.layout.shapes != null &&
               widget.layout.shapes!.any((s) => s.layer == ShapeLayer.above))
@@ -783,6 +1128,9 @@ class _ChartState extends State<Chart> {
     final chartTitle = widget.layout.title?.text ?? '';
     final xAxisTitle = widget.layout.xAxis?.title?.text ?? '';
     final yAxisTitle = widget.layout.yAxis?.title?.text ?? '';
+    final yAxis2Title = widget.layout.yAxis2?.title?.text ?? '';
+    final yAxis2Color =
+        widget.layout.yAxis2?.title?.style?.color ?? Colors.black;
     final showLegend =
         widget.layout.showLegend && (widget.layout.legend?.visible ?? true);
     final legendSide = widget.layout.legend?.side ?? Side.right;
@@ -793,6 +1141,9 @@ class _ChartState extends State<Chart> {
     final legendAtTop = showLegend && legendSide == Side.top;
     final legendAtBottom = showLegend && legendSide == Side.bottom;
     final legendAtRight = showLegend && legendSide == Side.right;
+    // When a secondary y-axis is present, increase right padding so the
+    // right-side axis labels have room and both charts stay aligned.
+    final double chartRightPad = _hasSecondaryYAxis ? 40.0 : 10.0;
     return Column(
       mainAxisSize: MainAxisSize.max,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -801,19 +1152,6 @@ class _ChartState extends State<Chart> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Y axis title (rotated 90° counter-clockwise)
-              if (yAxisTitle.isNotEmpty)
-                RotatedBox(
-                  quarterTurns: 3,
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 4.0),
-                    child: Text(
-                      yAxisTitle,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                  ),
-                ),
               Expanded(
                 child: Column(
                   mainAxisSize: MainAxisSize.max,
@@ -845,6 +1183,18 @@ class _ChartState extends State<Chart> {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          // Y axis title (rotated 90° counter-clockwise)
+                          if (yAxisTitle.isNotEmpty)
+                            RotatedBox(
+                              quarterTurns: 3,
+                              child: Padding(
+                                padding: const EdgeInsets.only(bottom: 4.0),
+                                child: Text(
+                                  yAxisTitle,
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ),
                           Expanded(
                             child: Column(
                               children: [
@@ -852,7 +1202,7 @@ class _ChartState extends State<Chart> {
                                   child: LayoutBuilder(
                                     builder: (context, constraints) {
                                       const leftPad = 40.0;
-                                      const rightPad = 10.0;
+                                      final rightPad = chartRightPad;
                                       final usableWidth =
                                           constraints.maxWidth -
                                           leftPad -
@@ -860,6 +1210,7 @@ class _ChartState extends State<Chart> {
                                       return chartArea(
                                         usableWidth: usableWidth,
                                         leftPad: leftPad,
+                                        rightPad: rightPad,
                                         visibilityKey: visibilityKey,
                                         variables: variables,
                                       );
@@ -872,12 +1223,25 @@ class _ChartState extends State<Chart> {
                                     child: Text(
                                       xAxisTitle,
                                       textAlign: TextAlign.center,
-                                      style: const TextStyle(fontSize: 12),
+                                      // style: const TextStyle(fontSize: 12),
                                     ),
                                   ),
                               ],
                             ),
                           ), // Expanded(Column with chart + x-axis title)
+                          // Secondary Y axis title (rotated 270° clockwise, on the right)
+                          if (yAxis2Title.isNotEmpty)
+                            RotatedBox(
+                              quarterTurns: 3, // this matches Plotly style
+                              child: Padding(
+                                padding: const EdgeInsets.only(bottom: 4.0),
+                                child: Text(
+                                  yAxis2Title,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(color: yAxis2Color),
+                                ),
+                              ),
+                            ),
                           // Right-side legend (side == right)
                           if (legendAtRight)
                             IntrinsicWidth(
@@ -955,7 +1319,7 @@ class _ChartState extends State<Chart> {
                 Text(
                   label,
                   style: TextStyle(
-                    fontSize: 12,
+                    // fontSize: 12,
                     color: isVisible ? Colors.black : Colors.grey,
                   ),
                 ),

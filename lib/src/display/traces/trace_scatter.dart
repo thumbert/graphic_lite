@@ -21,6 +21,8 @@ class ScatterTrace<D, R> extends Trace<D, R> {
     Line? line,
     bool showLegend = true,
     this.fill = Fill.none,
+    this.xAxis = 'x',
+    this.yAxis = 'y',
   }) {
     this.x = x;
     this.y = y;

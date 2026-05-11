@@ -3,15 +3,29 @@ import 'package:graphic_lite/graphic_lite.dart';
 
 /// https://plotly.com/javascript/reference/layout/yaxis/
 class YAxis {
-  YAxis({Color? color, this.title, this.range, AxisType? type}) {
+  YAxis({
+    Color? color,
+    this.title,
+    this.range,
+    AxisType? type,
+    this.overlaying,
+    this.side,
+    this.domain = const (0, 1),
+    this.anchor = 'x',
+  }) {
     this.color ??= YAxis.defaultColor;
     this.type = type ?? AxisType.inferred;
   }
 
+  /// If set to an opposite-letter axis id (e.g. `x2`), this axis is bound to 
+  /// the corresponding opposite-letter axis. If set to "free", this axis' 
+  /// position is determined by `position`.
+  String anchor;
+
   Color? color;
 
-  /// Sets the domain of this axis (in plot fraction).
-  (num, num) domain = (0, 1);
+  /// Sets the domain of this axis in plot fraction (min, max).
+  (num, num) domain;
 
   /// Sets the step in-between ticks on this axis. Use with `tick0`. Must be a
   /// positive number, or special strings available to "log" and "date" axes.
@@ -38,6 +52,8 @@ class YAxis {
   Color? gridColor;
 
   num? gridWidth;
+
+  String? overlaying;
 
   /// Sets the range of this axis.
   ///
@@ -69,17 +85,17 @@ class YAxis {
 
   Side? side;
 
-  /// Sets the placement of the first tick on this axis. Use with `dtick`. 
-  /// If the axis `type` is "log", then you must take the log of your 
-  /// starting tick (e.g. to set the starting tick to 100, set the `tick0` to 2) 
-  /// except when `dtick`="L<f>" (see `dtick` for more info). 
-  /// 
+  /// Sets the placement of the first tick on this axis. Use with `dtick`.
+  /// If the axis `type` is "log", then you must take the log of your
+  /// starting tick (e.g. to set the starting tick to 100, set the `tick0` to 2)
+  /// except when `dtick`="L<f>" (see `dtick` for more info).
+  ///
   /// If the axis `type` is "date", it should be a date string, like date data.
-  ///  
-  /// If the axis `type` is "category", it should be a number, using the scale 
-  /// where each category is assigned a serial number from zero in the order it 
+  ///
+  /// If the axis `type` is "category", it should be a number, using the scale
+  /// where each category is assigned a serial number from zero in the order it
   /// appears.
-  /// 
+  ///
   dynamic tick0;
 
   Title? title;
