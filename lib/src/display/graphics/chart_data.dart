@@ -12,6 +12,8 @@ class ChartDataResult {
     required this.domainX,
     required this.domainY,
     required this.hasFill,
+    this.hasBarWidths = false,
+    this.hasHorizontalBars = false,
   });
 
   /// The data list in the format expected by package `graphic`.
@@ -29,6 +31,13 @@ class ChartDataResult {
   /// Whether any [ScatterTrace] has a non-null, non-[Fill.none] fill that
   /// requires the `y_fill` variable and [AreaMark] to be present.
   final bool hasFill;
+
+  /// Whether any [BarTrace] has individual widths set, requiring `x_start`
+  /// and `x_end` variables for range-based position encoding.
+  final bool hasBarWidths;
+
+  /// Whether any [BarTrace] has [Orientation.horizontal].
+  final bool hasHorizontalBars;
 }
 
 /// Pure function that converts a list of [traces] into the flat data format
@@ -75,6 +84,8 @@ ChartDataResult buildChartData(List<Trace> traces, {Layout? layout}) {
   DateTime? minDt;
   DateTime? maxDt;
   final data = <Map<String, dynamic>>[];
+  bool hasBarWidths = false;
+  bool hasHorizontalBars = false;
 
   // For stacked bars, accumulate per-category sums to find the true y range.
   final stackedSums = <Object, double>{};
@@ -95,16 +106,40 @@ ChartDataResult buildChartData(List<Trace> traces, {Layout? layout}) {
     final trace = traces[i];
     if (trace.visible == TraceVisibility.off) continue;
     for (var j = 0; j < trace.x.length; j++) {
+      final isHorizontalBar =
+          trace is BarTrace && trace.orientation == Orientation.horizontal;
       final xVal = trace.x[j];
       if (xVal is DateTime) {
         if (minDt == null || xVal.isBefore(minDt)) minDt = xVal;
         if (maxDt == null || xVal.isAfter(maxDt)) maxDt = xVal;
       } else if (xVal is num) {
+        // For horizontal bars, trace.x contains bar values (→ 'y' after swap).
+        // Track in minXNum/maxXNum for _domainX reference; also update y-domain.
         if (xVal < minXNum) minXNum = xVal.toDouble();
         if (xVal > maxXNum) maxXNum = xVal.toDouble();
+        if (isHorizontalBar) {
+          // Bar values become 'y' after swap — track in y-domain.
+          if (xVal < minYNum) minYNum = xVal.toDouble();
+          if (xVal > maxYNum) maxYNum = xVal.toDouble();
+        }
+        // For VERTICAL bars with a width, expand the x domain to include bar edges.
+        if (trace is BarTrace && trace.width != null && !isHorizontalBar) {
+          final w =
+              (trace.width!.length == 1 ? trace.width!.first : trace.width![j])
+                  .toDouble();
+          final xStart = xVal.toDouble() - w / 2;
+          final xEnd = xVal.toDouble() + w / 2;
+          if (xStart < minXNum) minXNum = xStart;
+          if (xEnd > maxXNum) maxXNum = xEnd;
+        }
+      }
+      if (isHorizontalBar) {
+        hasHorizontalBars = true;
       }
       final yVal = trace.y[j];
-      if (yVal is num) {
+      // For horizontal bars, trace.y contains category strings (→ 'x' after swap);
+      // skip numeric y-domain tracking (handled above via trace.x).
+      if (yVal is num && !isHorizontalBar) {
         if (yVal < minYNum) minYNum = yVal.toDouble();
         if (yVal > maxYNum) maxYNum = yVal.toDouble();
       }
@@ -119,14 +154,29 @@ ChartDataResult buildChartData(List<Trace> traces, {Layout? layout}) {
           b.marker!.length == 1 ? b.marker!.first : b.marker![j],
         _ => null,
       };
+
+      // Individual bar widths/heights: store as bar_width (data units) for
+      // per-point size encoding.  For horizontal bars, this is the bar height
+      // (thickness) in y-axis units; for vertical bars it is the bar width in
+      // x-axis units.
+      num? barWidth;
+      if (trace is BarTrace && trace.width != null) {
+        hasBarWidths = true;
+        barWidth = trace.width!.length == 1
+            ? trace.width!.first
+            : trace.width![j];
+      }
+
       data.add({
-        'x': trace.x[j],
-        'y': trace.y[j],
+        // For horizontal bars, swap x/y: 'x' = category (String), 'y' = value (num).
+        'x': isHorizontalBar ? trace.y[j] : trace.x[j],
+        'y': isHorizontalBar ? trace.x[j] : trace.y[j],
         if (needsFill) 'y_fill': yFill,
         'name': trace.name ?? 'trace $i',
         if (trace.text != null)
           'text': trace.text!.length == 1 ? trace.text!.first : trace.text![j],
         'marker': markerForPoint,
+        'bar_width': ?barWidth,
       });
     }
   }
@@ -150,11 +200,23 @@ ChartDataResult buildChartData(List<Trace> traces, {Layout? layout}) {
     minYNum = 0.0;
     maxYNum = stackedSums.values.reduce((a, b) => a > b ? a : b);
   }
-  final yRange = maxYNum == minYNum ? 10.0 : maxYNum - minYNum;
-  domainY = (minYNum - 0.1 * yRange, maxYNum + 0.1 * yRange);
+  if (minYNum == double.infinity) {
+    domainY = (0.0, 1.0);
+  } else if (hasHorizontalBars) {
+    // For horizontal bars the value domain must include 0 so bars start at the
+    // left plot edge. Use min(0, minYNum) as the lower bound.
+    final effectiveMin = minYNum < 0 ? minYNum : 0.0;
+    final yRange = maxYNum - effectiveMin;
+    domainY = (effectiveMin, maxYNum + 0.1 * (yRange == 0 ? 10.0 : yRange));
+  } else {
+    final yRange = maxYNum == minYNum ? 10.0 : maxYNum - minYNum;
+    domainY = (minYNum - 0.1 * yRange, maxYNum + 0.1 * yRange);
+  }
 
   return ChartDataResult(
     hasFill: hasFill,
+    hasBarWidths: hasBarWidths,
+    hasHorizontalBars: hasHorizontalBars,
     data: data,
     xIsDateTime: xIsDateTime,
     domainX: domainX,

@@ -12,7 +12,7 @@ dependencies:
     sdk: flutter
 
   collection: '>=1.19.0 <2.0.0'
-  csv: '>=7.0.0 <8.0.0'
+  csv: '>=8.0.0 <9.0.0'
   date: 
     git: https://github.com/thumbert/date.git
   google_fonts: '>=8.0.2 <9.0.0'
@@ -20,7 +20,7 @@ dependencies:
   http: ^1.6.0
   graphic_lite:
     path: ..
-  signals_flutter: ^6.2.0
+  signals_flutter: '>=7.0.0 <8.0.0'
   syntax_highlight: ^0.5.0
   timezone: ^0.11.0
 
@@ -36,13 +36,15 @@ flutter:
 
   assets:
     - lib/examples/area_chart.dart
-    - lib/examples/basic_bar_chart.dart
+    - lib/examples/bar_chart_basic.dart
+    - lib/examples/bar_chart_grouped.dart
+    - lib/examples/bar_chart_horizontal.dart
+    - lib/examples/bar_chart_stacked.dart
+    - lib/examples/bar_chart_individual_widths.dart
     - lib/examples/data_labels_on_hover.dart
-    - lib/examples/grouped_bar_chart.dart
     - lib/examples/line_chart_bar_chart.dart
     - lib/examples/simple_scatter_plot.dart
     - lib/examples/simple_text_annotation.dart
-    - lib/examples/stacked_bar_chart.dart
     - lib/examples/two_y_axes.dart
 
 

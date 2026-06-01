@@ -9,6 +9,10 @@ TODO:
  - Have multiple plots on the same chart, for example how the nodal marks chart looks 
    in isone_nodal_marks/ docs.
 
+# 2026-05-31
+- Implement horizontal bar charts.
+- Implement bar charts with different widths.
+
 # 2026-05-10
  - Fixed tooltip for the combined line and bar chart example.  It now shows the  
    the correct info on mouse hover

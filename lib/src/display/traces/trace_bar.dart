@@ -17,6 +17,8 @@ class BarTrace<D, R> extends Trace<D, R> {
     bool showLegend = true,
     this.xAxis = 'x',
     this.yAxis = 'y',
+    this.width,
+    this.orientation = Orientation.vertical,
   }) {
     this.x = x;
     this.y = y;
@@ -26,7 +28,6 @@ class BarTrace<D, R> extends Trace<D, R> {
     this.showLegend = showLegend;
     assert(x.length == y.length);
   }
-
 
   /// Sets where the bar base is drawn (in position axis units). In "stack" or
   /// "relative" barmode, traces that set "base" will be excluded and drawn in
@@ -38,6 +39,9 @@ class BarTrace<D, R> extends Trace<D, R> {
   String legendGroup = '';
   LegendGroupTitle? legendGroupTitle;
   num? legendWidth;
+
+  /// Sets the bar width (in position axis units).
+  List<num>? width;
 
   /// Alternate to `x`. Builds a linear space of x coordinates. Use with `dx`
   /// where `x0` is the starting coordinate and `dx` the step.
@@ -156,13 +160,8 @@ class BarTrace<D, R> extends Trace<D, R> {
   /// and so on.
   String yAxis = 'y';
 
-  /// Only relevant in the following cases: 1. when `scattermode` is set to
-  /// "group". 2. when `stackgroup` is used, and only the first `orientation`
-  /// found in the `stackgroup` will be used - including if `visible` is
-  /// "legendonly" but not if it is `false`. Sets the stacking direction.
-  /// With "v" ("h"), the y (x) values of subsequent traces are added. Also
-  /// affects the default value of `fill`.
-  Orientation? orientation;
+  /// Sets the orientation of the bars. 
+  Orientation orientation;
 
   /// Only relevant when `stackgroup` is used, and only the first `groupnorm`
   /// found in the `stackgroup` will be used - including if `visible` is
@@ -379,6 +378,7 @@ class BarTrace<D, R> extends Trace<D, R> {
       if (legend != 'legend') 'legend': legend,
       if (legendRank != 1000) 'legendrank': legendRank,
       if (legendGroup != '') 'legendgroup': legendGroup,
+      if (width != null) 'width': width!.length == 1 ? width!.first : width,
       if (x0 != 0) 'x0': x0,
       if (dx != 1) 'dx': dx,
       if (y0 != 0) 'y0': y0,
@@ -455,4 +455,3 @@ class BarTrace<D, R> extends Trace<D, R> {
     }
   }
 }
-

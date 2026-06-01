@@ -86,6 +86,8 @@ class _ChartState extends State<Chart> {
   /// (like drag selection).
   late List<Map<String, dynamic>> data;
   bool _hasFill = false;
+  bool _hasBarWidths = false;
+  bool _hasHorizontalBars = false;
 
   // Cursor position updated on every hover event (no setState — used only in
   // _tooltipRenderer which runs synchronously after the gesture is processed).
@@ -279,6 +281,8 @@ class _ChartState extends State<Chart> {
       );
       _domainY = primaryResult.domainY;
       _hasFill = primaryResult.hasFill;
+      _hasBarWidths = primaryResult.hasBarWidths;
+      _hasHorizontalBars = primaryResult.hasHorizontalBars;
 
       final secondaryResult = buildChartData(
         secondaryTraces,
@@ -294,6 +298,8 @@ class _ChartState extends State<Chart> {
       _domainX = result.domainX;
       _domainY = result.domainY;
       _hasFill = result.hasFill;
+      _hasBarWidths = result.hasBarWidths;
+      _hasHorizontalBars = result.hasHorizontalBars;
       _dataSecondary = [];
       return result.data;
     }
@@ -315,6 +321,7 @@ class _ChartState extends State<Chart> {
       domainX: domainX ?? _domainX,
       domainY: domainY ?? _domainY,
       includeYFill: _hasFill,
+      includeBarRange: _hasBarWidths,
     );
   }
 
@@ -368,7 +375,25 @@ class _ChartState extends State<Chart> {
     // ── canvas x bounds ───────────────────────────────────────────────────
     final double barNormX;
     final double barHalfWidthNorm;
-    if (barMode == BarMode.group) {
+
+    // Check if the matched trace has individual widths for this x value.
+    final matchedTrace = barTraces.firstWhere(
+      (t) => (t.name ?? '') == traceName,
+      orElse: () => barTraces.first,
+    );
+    final matchedIdx = matchedTrace.x.indexWhere((v) => v == xVal);
+    if (matchedTrace.width != null && matchedIdx >= 0 && xVal is num) {
+      // Per-bar width: convert from data units to normalised [0,1] coordinates.
+      final w =
+          (matchedTrace.width!.length == 1
+                  ? matchedTrace.width!.first
+                  : matchedTrace.width![matchedIdx])
+              .toDouble();
+      final xRange = (_domainX.$2 - _domainX.$1).toDouble();
+      final normX = (xVal.toDouble() - _domainX.$1) / xRange;
+      barNormX = normX;
+      barHalfWidthNorm = xRange > 0 ? (w / 2) / xRange : 0;
+    } else if (barMode == BarMode.group) {
       final traceIdx = barTraces.indexWhere((t) => (t.name ?? '') == traceName);
       if (traceIdx < 0) return false;
       final ratio = (1 - barGap) / nGroups;
@@ -470,6 +495,105 @@ class _ChartState extends State<Chart> {
     Offset anchor,
     Map<int, g.Tuple> selectedTuples,
   ) {
+    if (selectedTuples.isEmpty && !_hasBarWidths && !_hasHorizontalBars)
+      return [];
+
+    // When bars have individual widths the graphic library's PointSelection
+    // uses nearest-centroid logic, which picks the wrong bar whenever the
+    // cursor is inside a wide bar but closer to a different bar's centroid.
+    // Bypass selectedTuples entirely and hit-test against each bar's actual
+    // x/y extents using the cursor position and the data list directly.
+    if (_hasBarWidths && !_hasHorizontalBars) {
+      const leftPad = 40.0, rightPad = 10.0, topPad = 5.0, bottomPad = 40.0;
+      final plotW = size.width - leftPad - rightPad;
+      final plotH = size.height - topPad - bottomPad;
+      final xRange = (_domainX.$2 - _domainX.$1).toDouble();
+      final yRange = (_domainY.$2 - _domainY.$1).toDouble();
+      final cursorDataX =
+          _domainX.$1 + ((_hoverLocalPosition.dx - leftPad) / plotW) * xRange;
+      final cursorDataY =
+          _domainY.$1 +
+          ((1.0 - (_hoverLocalPosition.dy - topPad) / plotH)) * yRange;
+
+      final activeData = _filteredData.isNotEmpty ? _filteredData : data;
+      Map<String, dynamic>? hitRow;
+      for (final row in activeData) {
+        if (!row.containsKey('bar_width')) continue;
+        final xVal = row['x'];
+        if (xVal is! num) continue;
+        final w = (row['bar_width'] as num).toDouble();
+        if (cursorDataX < xVal - w / 2 || cursorDataX > xVal + w / 2) continue;
+        final yVal = (row['y'] as num).toDouble();
+        final yBottom = yVal < 0 ? yVal : 0.0;
+        final yTop = yVal < 0 ? 0.0 : yVal;
+        if (cursorDataY < yBottom || cursorDataY > yTop) continue;
+        hitRow = row;
+        break;
+      }
+      if (hitRow == null) return [];
+      return _buildTooltipElements(size, hitRow, anchor);
+    }
+
+    // Horizontal bar hit-testing: with transposed coord, screen-x maps to the
+    // value axis ('y' after data-swap) and screen-y maps to the category axis
+    // ('x' after data-swap).
+    if (_hasHorizontalBars) {
+      const leftPad = 40.0, rightPad = 10.0, topPad = 5.0, bottomPad = 40.0;
+      final plotW = size.width - leftPad - rightPad;
+      final plotH = size.height - topPad - bottomPad;
+      // With transposed coord and data-swap: screen-x → value axis → use _domainY.
+      final yRange = (_domainY.$2 - _domainY.$1).toDouble();
+      final cursorDataValue =
+          _domainY.$1 + ((_hoverLocalPosition.dx - leftPad) / plotW) * yRange;
+      // screen-y: graphic y-axis goes bottom→top so normY = 1 - normScreenY.
+      final normScreenY =
+          (_hoverLocalPosition.dy - topPad).clamp(0.0, plotH) / plotH;
+      final normY = 1.0 - normScreenY; // 0 = bottom, 1 = top
+
+      final barTraces = widget.traces.whereType<BarTrace>().toList();
+      // Collect unique categories (from trace.y, still holds categories) in order.
+      final categories = <Object>[];
+      for (final t in barTraces) {
+        for (final yv in t.y) {
+          if (!categories.contains(yv)) categories.add(yv);
+        }
+      }
+      final n = categories.length;
+      if (n == 0) return [];
+
+      // Discrete scale: category i center is at (i + 0.5) / n.
+      final barGap = widget.layout.barGap.toDouble();
+      final halfBandNorm = (1 - barGap) / 2.0 / n;
+      final catIdx = (normY * n).floor().clamp(0, n - 1);
+      final catNormCenter = (catIdx + 0.5) / n;
+      if ((normY - catNormCenter).abs() > halfBandNorm) return [];
+      final category = categories[catIdx];
+
+      // After data-swap: row['x'] = category (String), row['y'] = value (num).
+      final activeData = _filteredData.isNotEmpty ? _filteredData : data;
+      Map<String, dynamic>? hitRow;
+      for (final row in activeData) {
+        if (row['x'] != category) continue;
+        final yVal = row['y'];
+        if (yVal is! num) continue;
+        final barValue = yVal.toDouble();
+        final valueLow = barValue >= 0 ? 0.0 : barValue;
+        final valueHigh = barValue >= 0 ? barValue : 0.0;
+        // If bar_width is set, use it to constrain the category hit area.
+        if (row.containsKey('bar_width')) {
+          final w = (row['bar_width'] as num).toDouble();
+          final halfW = (w / 2) / n;
+          if ((normY - catNormCenter).abs() > halfW) continue;
+        }
+        if (cursorDataValue >= valueLow && cursorDataValue <= valueHigh) {
+          hitRow = row;
+          break;
+        }
+      }
+      if (hitRow == null) return [];
+      return _buildTooltipElements(size, hitRow, anchor);
+    }
+
     if (selectedTuples.isEmpty) return [];
 
     // For stacked/grouped bar charts, multiple tuples share the same x column.
@@ -596,6 +720,16 @@ class _ChartState extends State<Chart> {
       return [];
     }
 
+    return _buildTooltipElements(size, tuple, anchor);
+  }
+
+  /// Builds the tooltip [g.MarkElement]s for a given data row / tuple.
+  List<g.MarkElement> _buildTooltipElements(
+    Size size,
+    Map<String, dynamic> tuple,
+    Offset anchor,
+  ) {
+    final name = tuple['name'] as String;
     Color traceColor = const Color(0xff595959);
     for (var i = 0; i < widget.traces.length; i++) {
       final trace = widget.traces[i];
@@ -681,7 +815,11 @@ class _ChartState extends State<Chart> {
     return g.BasicLineShape();
   }
 
-  List<g.Mark<g.Shape>> makeMarks(List<Trace> traces, {double? chartWidth}) {
+  List<g.Mark<g.Shape>> makeMarks(
+    List<Trace> traces, {
+    double? chartWidth,
+    double? chartHeight,
+  }) {
     return [
       ..._makeScatterMarks(traces.whereType<ScatterTrace>().toList()),
       _makeIntervalMark(
@@ -690,6 +828,10 @@ class _ChartState extends State<Chart> {
         barGap: widget.layout.barGap.toDouble(),
         barGroupGap: widget.layout.barGroupGap.toDouble(),
         chartWidth: chartWidth,
+        chartHeight: chartHeight,
+        domainX: _domainX,
+        hasIndividualWidths: _hasBarWidths,
+        isHorizontal: _hasHorizontalBars,
       ),
     ];
   }
@@ -823,10 +965,17 @@ class _ChartState extends State<Chart> {
     double barGap = 0.2,
     double barGroupGap = 0,
     double? chartWidth,
+    double? chartHeight,
+    (num, num)? domainX,
+    bool hasIndividualWidths = false,
+    bool isHorizontal = false,
   }) {
+    // For horizontal bars the category dimension is y; for vertical it is x.
     final nCategories = traces.isEmpty
         ? 1
-        : traces.expand((t) => t.x).toSet().length;
+        : (isHorizontal
+              ? traces.expand((t) => t.y).toSet().length
+              : traces.expand((t) => t.x).toSet().length);
     final nGroups = traces.isEmpty ? 1 : traces.length;
 
     // DodgeModifier.ratio is the step between bars as a fraction of the band.
@@ -837,45 +986,119 @@ class _ChartState extends State<Chart> {
       _ => [],
     };
 
-    // Compute bar pixel width from layout gaps and available width.
-    double? barSize;
-    if (chartWidth != null && nCategories > 0) {
-      if (barMode == BarMode.group && nGroups > 0) {
-        // Each bar occupies (1-barGroupGap) of its dodge slot.
-        barSize =
-            (1 - barGroupGap) *
-            (1 - barGap) *
-            chartWidth /
-            (nCategories * nGroups);
+    // Position varset: both horizontal and vertical bars use Varset('x') * Varset('y').
+    // For horizontal bars, x holds categories (String) and y holds values (num),
+    // so that the LineMark's firstVariables = ['x','y'] drives the axis labels
+    // correctly: with transposed coord, 'x' (categories) → LEFT axis, 'y' (values)
+    // → BOTTOM axis.
+    final positionEncode = g.Varset('x') * g.Varset('y') / g.Varset('name');
+
+    // Color encoder shared by all branches below.
+    final colorEncode = g.ColorEncode(
+      encoder: (e) {
+        for (var i = 0; i < traces.length; i++) {
+          final trace = traces[i];
+          if (trace.visible == TraceVisibility.off) continue;
+          if (trace.name == e['name']) {
+            final mc = trace.marker?.isNotEmpty == true
+                ? trace.marker!.first.color
+                : null;
+            if (mc is Color && mc != Colors.transparent) return mc;
+            final globalIdx = widget.traces.indexOf(trace);
+            return Defaults.colors[globalIdx < 0 ? i : globalIdx];
+          }
+        }
+        return Colors.transparent;
+      },
+    );
+
+    // When individual widths are set, use a per-point SizeEncode that converts
+    // bar_width from data units to pixels.
+    if (hasIndividualWidths) {
+      if (isHorizontal) {
+        // bar_width is in category units (1.0 = one full category band).
+        // If y values are numeric, bar_width is in y-axis data units.
+        final plotH = chartHeight ?? 300.0;
+        final sampleY = traces.isEmpty ? null : traces.first.y.firstOrNull;
+        g.SizeEncode sizeEncode;
+        if (sampleY is num) {
+          final yRange = (_domainY.$2 - _domainY.$1).toDouble();
+          sizeEncode = g.SizeEncode(
+            encoder: (e) {
+              final w = e['bar_width'];
+              if (w == null || yRange <= 0) return 10.0;
+              return (w as num).toDouble() / yRange * plotH;
+            },
+          );
+        } else {
+          // Categorical y: one category band = plotH / nCategories pixels.
+          sizeEncode = g.SizeEncode(
+            encoder: (e) {
+              final w = e['bar_width'];
+              if (w == null || nCategories <= 0) return 10.0;
+              return (w as num).toDouble() / nCategories * plotH;
+            },
+          );
+        }
+        return g.IntervalMark(
+          position: positionEncode,
+          modifiers: modifiers.isEmpty ? null : modifiers,
+          size: sizeEncode,
+          color: colorEncode,
+        );
       } else {
-        // Single or stacked: barGap is the fraction of category width that is gap.
-        barSize = (1 - barGap) * chartWidth / nCategories;
+        final xRange = domainX != null
+            ? (domainX.$2 - domainX.$1).toDouble()
+            : 1.0;
+        final plotW = chartWidth ?? 300.0;
+        return g.IntervalMark(
+          position: positionEncode,
+          modifiers: modifiers.isEmpty ? null : modifiers,
+          size: g.SizeEncode(
+            encoder: (e) {
+              final w = e['bar_width'];
+              if (w == null || xRange <= 0) return 10.0;
+              return (w as num).toDouble() / xRange * plotW;
+            },
+          ),
+          color: colorEncode,
+        );
+      }
+    }
+
+    // Compute bar pixel size from layout gaps and available space.
+    double? barSize;
+    if (isHorizontal) {
+      if (chartHeight != null && nCategories > 0) {
+        if (barMode == BarMode.group && nGroups > 0) {
+          barSize =
+              (1 - barGroupGap) *
+              (1 - barGap) *
+              chartHeight /
+              (nCategories * nGroups);
+        } else {
+          barSize = (1 - barGap) * chartHeight / nCategories;
+        }
+      }
+    } else {
+      if (chartWidth != null && nCategories > 0) {
+        if (barMode == BarMode.group && nGroups > 0) {
+          barSize =
+              (1 - barGroupGap) *
+              (1 - barGap) *
+              chartWidth /
+              (nCategories * nGroups);
+        } else {
+          barSize = (1 - barGap) * chartWidth / nCategories;
+        }
       }
     }
 
     return g.IntervalMark(
-      position: g.Varset('x') * g.Varset('y') / g.Varset('name'),
+      position: positionEncode,
       modifiers: modifiers.isEmpty ? null : modifiers,
       size: barSize != null ? g.SizeEncode(value: barSize) : null,
-      color: g.ColorEncode(
-        encoder: (e) {
-          for (var i = 0; i < traces.length; i++) {
-            final trace = traces[i];
-            if (trace.visible == TraceVisibility.off) continue;
-            if (trace.name == e['name']) {
-              final mc = trace.marker?.isNotEmpty == true
-                  ? trace.marker!.first.color
-                  : null;
-              if (mc is Color && mc != Colors.transparent) return mc;
-              // Use the global trace index so colors cycle correctly when
-              // BarTraces are mixed with other trace types.
-              final globalIdx = widget.traces.indexOf(trace);
-              return Defaults.colors[globalIdx < 0 ? i : globalIdx];
-            }
-          }
-          return Colors.transparent;
-        },
-      ),
+      color: colorEncode,
     );
   }
 
@@ -957,6 +1180,7 @@ class _ChartState extends State<Chart> {
 
   Widget chartArea({
     required double usableWidth,
+    required double usableHeight,
     required double leftPad,
     required double rightPad,
     required String visibilityKey,
@@ -987,33 +1211,65 @@ class _ChartState extends State<Chart> {
             padding: (_) => EdgeInsets.fromLTRB(leftPad, 5, rightPad, 40),
             data: _filteredData.isNotEmpty ? _filteredData : data,
             variables: variables,
-            marks: makeMarks(widget.traces, chartWidth: usableWidth),
-            coord: g.RectCoord(horizontalRange: [0, 1], verticalRange: [0, 1]),
-            axes: [
-              g.AxisGuide(
-                grid: g.Defaults.strokeStyle,
-                label: g.LabelStyle(
-                  textStyle: Defaults.textStyle.copyWith(color: Colors.black),
-                  offset: const Offset(0, 7.5),
-                ),
-              ),
-              g.AxisGuide(
-                grid: g.Defaults.strokeStyle,
-                label: g.LabelStyle(
-                  textStyle: Defaults.textStyle.copyWith(color: Colors.black),
-                  offset: const Offset(-7.5, 0),
-                ),
-              ),
-            ],
+            marks: makeMarks(
+              widget.traces,
+              chartWidth: usableWidth,
+              chartHeight: usableHeight,
+            ),
+            coord: g.RectCoord(
+              horizontalRange: [0, 1],
+              verticalRange: [0, 1],
+              transposed: _hasHorizontalBars,
+            ),
+            axes: _hasHorizontalBars
+                ? [
+                    // dim1 = y (categories) → appears on LEFT when transposed
+                    g.AxisGuide(
+                      grid: g.Defaults.strokeStyle,
+                      label: g.LabelStyle(
+                        textStyle: Defaults.textStyle.copyWith(
+                          color: Colors.black,
+                        ),
+                        offset: const Offset(-7.5, 0),
+                      ),
+                    ),
+                    // dim2 = x (values) → appears on BOTTOM when transposed
+                    g.AxisGuide(
+                      grid: g.Defaults.strokeStyle,
+                      label: g.LabelStyle(
+                        textStyle: Defaults.textStyle.copyWith(
+                          color: Colors.black,
+                        ),
+                        offset: const Offset(0, 7.5),
+                      ),
+                    ),
+                  ]
+                : [
+                    g.AxisGuide(
+                      grid: g.Defaults.strokeStyle,
+                      label: g.LabelStyle(
+                        textStyle: Defaults.textStyle.copyWith(
+                          color: Colors.black,
+                        ),
+                        offset: const Offset(0, 7.5),
+                      ),
+                    ),
+                    g.AxisGuide(
+                      grid: g.Defaults.strokeStyle,
+                      label: g.LabelStyle(
+                        textStyle: Defaults.textStyle.copyWith(
+                          color: Colors.black,
+                        ),
+                        offset: const Offset(-7.5, 0),
+                      ),
+                    ),
+                  ],
             selections: {
               'tooltipMouse': widget.traces.any((t) => t is BarTrace)
                   ? g.PointSelection(
                       on: {g.GestureType.hover},
                       dim: g.Dim.x,
                       nearest: true,
-                      // Group by x so ALL traces (bar + scatter) at the
-                      // nearest x column enter selectedTuples.  The renderer
-                      // then decides which one to show.
                       variable: 'x',
                       devices: {PointerDeviceKind.mouse},
                     )
@@ -1132,7 +1388,9 @@ class _ChartState extends State<Chart> {
     final yAxis2Color =
         widget.layout.yAxis2?.title?.style?.color ?? Colors.black;
     final showLegend =
-        widget.layout.showLegend && (widget.layout.legend?.visible ?? true);
+        widget.layout.showLegend &&
+        (widget.layout.legend?.visible ?? true) &&
+        widget.traces.where((t) => t.visible != TraceVisibility.off).length > 1;
     final legendSide = widget.layout.legend?.side ?? Side.right;
     final legendMainAxis =
         widget.layout.legend?.mainAxisAlignment ?? MainAxisAlignment.start;
@@ -1202,13 +1460,20 @@ class _ChartState extends State<Chart> {
                                   child: LayoutBuilder(
                                     builder: (context, constraints) {
                                       const leftPad = 40.0;
+                                      const topPad = 5.0;
+                                      const bottomPad = 40.0;
                                       final rightPad = chartRightPad;
                                       final usableWidth =
                                           constraints.maxWidth -
                                           leftPad -
                                           rightPad;
+                                      final usableHeight =
+                                          constraints.maxHeight -
+                                          topPad -
+                                          bottomPad;
                                       return chartArea(
                                         usableWidth: usableWidth,
+                                        usableHeight: usableHeight,
                                         leftPad: leftPad,
                                         rightPad: rightPad,
                                         visibilityKey: visibilityKey,

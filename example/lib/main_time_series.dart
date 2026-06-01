@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:gallery/assets/caiso_prices.dart';
+import '../assets/caiso_prices.dart';
 import 'package:graphic_lite/graphic_lite.dart';
 import 'package:timezone/data/latest.dart';
 import 'package:timezone/timezone.dart';
@@ -16,7 +16,9 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Time Series Plot',
-      theme: ThemeData(colorScheme: .fromSeed(seedColor: Colors.deepPurple)),
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+      ),
       home: const MyHomePage(title: 'Time Series Plot'),
     );
   }

@@ -21,6 +21,7 @@ Map<String, g.Variable<Map<dynamic, dynamic>, dynamic>> buildChartVariables(
   (num, num)? domainX,
   required (num, num) domainY,
   bool includeYFill = false,
+  bool includeBarRange = false,
 }) {
   final out = <String, g.Variable<Map<dynamic, dynamic>, dynamic>>{};
 
@@ -58,25 +59,30 @@ Map<String, g.Variable<Map<dynamic, dynamic>, dynamic>> buildChartVariables(
     };
   }
 
-  // ── y / y_fill variables — must share the same scale instance ─────────────
-  final yScale = g.LinearScale(min: domainY.$1, max: domainY.$2);
-  out['y'] = switch (sampleY) {
-    num() => g.Variable(
-      accessor: (Map map) => map['y'] as num,
-      scale: yScale as g.Scale<num, num>,
-    ),
-    _ => g.Variable(
-      accessor: (Map map) => map['y'] as num,
-      scale: yScale as g.Scale<num, num>,
-    ),
-  };
-  if (includeYFill) {
-    out['y_fill'] = g.Variable(
-      accessor: (Map map) => (map['y_fill'] ?? 0.0) as num,
-      scale: yScale, // identical instance — required by graphic
+  // ── bar_width variable for per-point size encoding ────────────────────────
+  if (includeBarRange) {
+    out['bar_width'] = g.Variable(
+      accessor: (Map map) => (map['bar_width'] ?? 0) as num,
     );
   }
 
+  // ── y / y_fill variables — must share the same scale instance ─────────────
+  if (sampleY is String) {
+    // Categorical y-axis (e.g. horizontal bar charts): no numeric scale needed.
+    out['y'] = g.Variable(accessor: (Map map) => map['y'] as String);
+  } else {
+    final yScale = g.LinearScale(min: domainY.$1, max: domainY.$2);
+    out['y'] = g.Variable(
+      accessor: (Map map) => map['y'] as num,
+      scale: yScale as g.Scale<num, num>,
+    );
+    if (includeYFill) {
+      out['y_fill'] = g.Variable(
+        accessor: (Map map) => (map['y_fill'] ?? 0.0) as num,
+        scale: yScale, // identical instance — required by graphic
+      );
+    }
+  }
   // ── auxiliary variables ───────────────────────────────────────────────────
   out['name'] = g.Variable(accessor: (Map e) => e['name'] as String);
   out['text'] = g.Variable(accessor: (Map e) => (e['text'] ?? '') as String);

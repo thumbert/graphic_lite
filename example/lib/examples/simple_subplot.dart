@@ -1,5 +1,4 @@
 import 'package:graphic_lite/graphic_lite.dart';
-
 /// https://plotly.com/javascript/subplots/#custom-sized-subplot
 Chart simpleSubplot() {
   final traces = [

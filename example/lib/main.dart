@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart' hide Title;
 import 'package:flutter/services.dart';
+import 'package:gallery/examples/bar_chart_horizontal.dart';
+import 'package:gallery/examples/bar_chart_individual_widths.dart';
 import 'package:gallery/examples/line_chart_bar_chart.dart';
 import 'package:gallery/examples/two_y_axes.dart';
 import 'package:syntax_highlight/syntax_highlight.dart';
 
 import 'examples/area_chart.dart';
-import 'examples/basic_bar_chart.dart';
+import 'examples/bar_chart_basic.dart';
 import 'examples/data_labels_on_hover.dart';
-import 'examples/grouped_bar_chart.dart';
+import 'examples/bar_chart_grouped.dart';
 import 'examples/simple_scatter_plot.dart';
 import 'examples/simple_text_annotation.dart';
-import 'examples/stacked_bar_chart.dart';
+import 'examples/bar_chart_stacked.dart';
 
 late final Highlighter _dartLightHighlighter;
 
@@ -29,7 +31,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Example gallery',
+      title: 'Examples gallery',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
       ),
@@ -67,9 +69,11 @@ class GalleryCharts extends State<MyHomePage> {
     ('Data Labels on Hover', 'data_labels_on_hover.dart'),
     ('Two Y Axes', 'two_y_axes.dart'),
     ('Area Chart', 'area_chart.dart'),
-    ('Basic Bar Chart', 'basic_bar_chart.dart'),
-    ('Stacked Bar Chart', 'stacked_bar_chart.dart'),
-    ('Grouped Bar Chart', 'grouped_bar_chart.dart'),
+    ('Basic Bar Chart', 'bar_chart_basic.dart'),
+    ('Horizontal Bar Chart', 'bar_chart_horizontal.dart'),
+    ('Stacked Bar Chart', 'bar_chart_stacked.dart'),
+    ('Grouped Bar Chart', 'bar_chart_grouped.dart'),
+    ('Bar Chart with different widths', 'bar_chart_individual_widths.dart'),
     ('Line Chart and Bar Chart', 'line_chart_bar_chart.dart'),
     ('Simple Text Annotation', 'simple_text_annotation.dart'),
   ];
@@ -115,12 +119,20 @@ class GalleryCharts extends State<MyHomePage> {
       case 'Basic Bar Chart':
         widgets = [SizedBox(width: 800, height: 500, child: basicBarChart())];
         break;
+      case 'Horizontal Bar Chart':
+        widgets = [SizedBox(width: 800, height: 500, child: horizontalBarChart())];
+        break;  
       case 'Stacked Bar Chart':
         widgets = [SizedBox(width: 800, height: 500, child: stackedBarChart())];
         break;
       case 'Grouped Bar Chart':
         widgets = [SizedBox(width: 800, height: 500, child: groupedBarChart())];
         break;
+      case 'Bar Chart with different widths':
+        widgets = [
+          SizedBox(width: 600, height: 400, child: barChartIndividualWidths()),
+        ];
+        break;  
       case 'Line Chart and Bar Chart':
         widgets = [
           SizedBox(width: 800, height: 500, child: lineChartAndBarChart()),
