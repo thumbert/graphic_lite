@@ -56,6 +56,32 @@ class _LegendLinePainter extends CustomPainter {
       color != old.color || strokeWidth != old.strokeWidth || dash != old.dash;
 }
 
+/// Configuration for a single subplot panel.  Used internally by [_ChartState]
+/// when the layout has a [Grid] or multiple x-axes.
+class _SubplotSpec {
+  const _SubplotSpec({
+    required this.xAxisId,
+    required this.yAxisId,
+    required this.xDomain,
+    required this.yDomain,
+    required this.traces,
+  });
+
+  /// E.g. 'x', 'x2', 'x3', …
+  final String xAxisId;
+
+  /// E.g. 'y', 'y2', 'y3', …
+  final String yAxisId;
+
+  /// Normalized [0, 1] horizontal extent of this subplot (0 = left, 1 = right).
+  final (num, num) xDomain;
+
+  /// Normalized [0, 1] vertical extent of this subplot (0 = bottom, 1 = top).
+  final (num, num) yDomain;
+
+  final List<Trace> traces;
+}
+
 class Chart extends StatefulWidget {
   Chart({super.key, required this.traces, Layout? layout})
     : layout = layout ?? Layout.getDefault() {
@@ -102,6 +128,12 @@ class _ChartState extends State<Chart> {
   Offset? _dragStart;
   List<Map<String, dynamic>> _filteredData = [];
   List<double>? _currentSelectionNormalized;
+
+  // Per-subplot gesture controllers and hover positions (keyed by
+  // '${xAxisId}_${yAxisId}', e.g. 'x_y', 'x2_y2').
+  final Map<String, StreamController<g.GestureEvent>>
+  _subplotGestureControllers = {};
+  final Map<String, Offset> _subplotHoverPositions = {};
 
   @override
   void initState() {
@@ -220,6 +252,9 @@ class _ChartState extends State<Chart> {
   void dispose() {
     _gestureSub?.cancel();
     _gestureController.close();
+    for (final ctrl in _subplotGestureControllers.values) {
+      ctrl.close();
+    }
     super.dispose();
   }
 
@@ -859,7 +894,8 @@ class _ChartState extends State<Chart> {
                 // Default: trace line/marker color at 50% opacity.
                 final lineColor = trace.line?.color;
                 final mc = trace.marker?.first.color;
-                Color base = Defaults.colors[i];
+                final globalIdx = widget.traces.indexOf(trace);
+                Color base = Defaults.colors[globalIdx < 0 ? i : globalIdx];
                 if (lineColor is Color && lineColor != Colors.transparent) {
                   base = lineColor;
                 } else if (mc is Color && mc != Colors.transparent) {
@@ -915,7 +951,8 @@ class _ChartState extends State<Chart> {
                   if (lineColor != null && lineColor != Colors.transparent) {
                     return lineColor;
                   }
-                  return Defaults.colors[i];
+                  final globalIdx = widget.traces.indexOf(trace);
+                  return Defaults.colors[globalIdx < 0 ? i : globalIdx];
                 }
               }
             }
@@ -933,7 +970,8 @@ class _ChartState extends State<Chart> {
                 if (trace.mode.toString().contains('markers')) {
                   final mc = trace.marker?.first.color;
                   if (mc is Color && mc != Colors.transparent) return mc;
-                  return Defaults.colors[i];
+                  final globalIdx = widget.traces.indexOf(trace);
+                  return Defaults.colors[globalIdx < 0 ? i : globalIdx];
                 }
               }
             }
@@ -1178,6 +1216,423 @@ class _ChartState extends State<Chart> {
     ];
   }
 
+  /// True when the chart uses a grid or has traces assigned to non-primary
+  /// x-axes (i.e. 'x2', 'x3', …).  In this mode each unique (xAxis, yAxis)
+  /// pair is rendered as an independent [g.Chart] positioned inside a [Stack].
+  bool get _isSubplotMode =>
+      widget.layout.grid != null || widget.traces.any((t) => t.xAxis != 'x');
+
+  /// Builds the list of subplot specs from the layout grid (when present) or
+  /// from the axis domain properties on the layout axes.
+  List<_SubplotSpec> _computeSubplotSpecs() {
+    final grid = widget.layout.grid;
+    final xDomains = <String, (num, num)>{};
+    final yDomains = <String, (num, num)>{};
+
+    if (grid != null) {
+      final cols = grid.columns;
+      final rows = grid.rows;
+      // Gap width / height as a fraction of the TOTAL chart dimension.
+      // xGap is defined as "fraction of the total width available to one cell",
+      // so gap between adjacent cells = xGap * (1/cols).
+      final gapW = cols > 1 ? grid.xGap.toDouble() / cols : 0.0;
+      final gapH = rows > 1 ? grid.yGap.toDouble() / rows : 0.0;
+      // Width / height of each cell's plot area.
+      final cellW = (1.0 - (cols - 1) * gapW) / cols;
+      final cellH = (1.0 - (rows - 1) * gapH) / rows;
+      final stepX = cellW + gapW;
+      final stepY = cellH + gapH;
+
+      for (var r = 0; r < rows; r++) {
+        for (var c = 0; c < cols; c++) {
+          String xAxisId, yAxisId;
+          if (grid.pattern == GridPattern.independent) {
+            // Each cell gets its own xy pair assigned in row-major order
+            // (left→right across the topmost row first).
+            final cellIndex = r * cols + c;
+            xAxisId = cellIndex == 0 ? 'x' : 'x${cellIndex + 1}';
+            yAxisId = cellIndex == 0 ? 'y' : 'y${cellIndex + 1}';
+          } else {
+            // coupled: one x-axis per column, one y-axis per row.
+            xAxisId = c == 0 ? 'x' : 'x${c + 1}';
+            yAxisId = r == 0 ? 'y' : 'y${r + 1}';
+          }
+
+          // X domain: straightforward left→right column layout.
+          xDomains[xAxisId] = (c * stepX, c * stepX + cellW);
+
+          // Y domain: for topToBottom the first row (r=0) is at the top, which
+          // maps to the highest y values (1 = top in plot coords).
+          final rVisual = (grid.rowOrder == GridRowOrder.topToBottom)
+              ? rows - 1 - r
+              : r;
+          yDomains[yAxisId] = (rVisual * stepY, rVisual * stepY + cellH);
+        }
+      }
+    } else {
+      // Manual subplot positioning: read domains from the layout axis objects.
+      XAxis? xAxisFor(String id) => switch (id) {
+        'x' || 'x1' => widget.layout.xAxis,
+        'x2' => widget.layout.xAxis2,
+        'x3' => widget.layout.xAxis3,
+        'x4' => widget.layout.xAxis4,
+        _ => null,
+      };
+      YAxis? yAxisFor(String id) => switch (id) {
+        'y' || 'y1' => widget.layout.yAxis,
+        'y2' => widget.layout.yAxis2,
+        'y3' => widget.layout.yAxis3,
+        'y4' => widget.layout.yAxis4,
+        _ => null,
+      };
+
+      for (final trace in widget.traces) {
+        xDomains.putIfAbsent(
+          trace.xAxis,
+          () => xAxisFor(trace.xAxis)?.domain ?? (0.0, 1.0),
+        );
+        yDomains.putIfAbsent(
+          trace.yAxis,
+          () => yAxisFor(trace.yAxis)?.domain ?? (0.0, 1.0),
+        );
+      }
+    }
+
+    // Group traces by (xAxisId, yAxisId) pair.
+    final groups = <(String, String), List<Trace>>{};
+    for (final trace in widget.traces) {
+      groups.putIfAbsent((trace.xAxis, trace.yAxis), () => []).add(trace);
+    }
+
+    return [
+      for (final entry in groups.entries)
+        _SubplotSpec(
+          xAxisId: entry.key.$1,
+          yAxisId: entry.key.$2,
+          xDomain: xDomains[entry.key.$1] ?? (0.0, 1.0),
+          yDomain: yDomains[entry.key.$2] ?? (0.0, 1.0),
+          traces: entry.value,
+        ),
+    ];
+  }
+
+  /// Computes the required left padding to accommodate the widest tick label.
+  /// For horizontal bar charts the category labels appear on the left axis;
+  /// measuring them with [TextPainter] avoids labels being clipped.
+  double _computeLeftPad() {
+    if (!_hasHorizontalBars) return 40.0;
+    final categories = <String>{};
+    for (final trace in widget.traces.whereType<BarTrace>()) {
+      for (final yv in trace.y) {
+        categories.add(yv.toString());
+      }
+    }
+    if (categories.isEmpty) return 40.0;
+    final textStyle = Defaults.textStyle.copyWith(color: Colors.black);
+    double maxWidth = 0;
+    for (final label in categories) {
+      final painter = TextPainter(
+        text: TextSpan(text: label, style: textStyle),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      if (painter.width > maxWidth) maxWidth = painter.width;
+    }
+    // 7.5 px label offset + 8 px gap between label and plot edge
+    return maxWidth + 15.5;
+  }
+
+  /// Builds a single subplot panel positioned inside a [Stack] of size
+  /// [totalW] × [totalH].  Temporarily swaps the relevant instance fields so
+  /// existing helpers ([makeMarks], [makeVariables], [_computeLeftPad]) all use
+  /// the per-subplot data, then restores them before returning.
+  /// Builds a per-subplot tooltip renderer that closes over the panel's own
+  /// data, domain, and traces so it doesn't read from the shared instance fields.
+  g.TooltipRenderer _makeSubplotTooltipRenderer({
+    required List<Map<String, dynamic>> panelData,
+    required (num, num) panelDomainX,
+    required (num, num) panelDomainY,
+    required bool panelHasBarWidths,
+    required bool panelHasHorizontalBars,
+    required List<Trace> panelTraces,
+    required String panelKey,
+    required double leftPad,
+    required double bottomPad,
+    required double topPad,
+    required double rightPad,
+  }) {
+    return (Size size, Offset anchor, Map<int, g.Tuple> selectedTuples) {
+      final hoverPos = _subplotHoverPositions[panelKey] ?? Offset.zero;
+
+      // ── Custom bar hit-testing (per-point widths) ────────────────────────
+      if (panelHasBarWidths && !panelHasHorizontalBars) {
+        final plotW = size.width - leftPad - rightPad;
+        final plotH = size.height - topPad - bottomPad;
+        final xRange = (panelDomainX.$2 - panelDomainX.$1).toDouble();
+        final yRange = (panelDomainY.$2 - panelDomainY.$1).toDouble();
+        final cursorDataX =
+            panelDomainX.$1 + ((hoverPos.dx - leftPad) / plotW) * xRange;
+        final cursorDataY =
+            panelDomainY.$1 + ((1.0 - (hoverPos.dy - topPad) / plotH)) * yRange;
+        Map<String, dynamic>? hitRow;
+        for (final row in panelData) {
+          if (!row.containsKey('bar_width')) continue;
+          final xVal = row['x'];
+          if (xVal is! num) continue;
+          final w = (row['bar_width'] as num).toDouble();
+          if (cursorDataX < xVal - w / 2 || cursorDataX > xVal + w / 2) {
+            continue;
+          }
+          final yVal = (row['y'] as num).toDouble();
+          final yBottom = yVal < 0 ? yVal : 0.0;
+          final yTop = yVal < 0 ? 0.0 : yVal;
+          if (cursorDataY < yBottom || cursorDataY > yTop) continue;
+          hitRow = row;
+          break;
+        }
+        if (hitRow == null) return [];
+        return _buildTooltipElements(size, hitRow, anchor);
+      }
+
+      // ── Horizontal bar hit-testing ────────────────────────────────────────
+      if (panelHasHorizontalBars) {
+        final plotW = size.width - leftPad - rightPad;
+        final plotH = size.height - topPad - bottomPad;
+        final yRange = (panelDomainY.$2 - panelDomainY.$1).toDouble();
+        final cursorDataValue =
+            panelDomainY.$1 + ((hoverPos.dx - leftPad) / plotW) * yRange;
+        final normScreenY = (hoverPos.dy - topPad).clamp(0.0, plotH) / plotH;
+        final normY = 1.0 - normScreenY;
+        final barTraces = panelTraces.whereType<BarTrace>().toList();
+        final categories = <Object>[];
+        for (final t in barTraces) {
+          for (final yv in t.y) {
+            if (!categories.contains(yv)) categories.add(yv);
+          }
+        }
+        final n = categories.length;
+        if (n == 0) return [];
+        final barGap = widget.layout.barGap.toDouble();
+        final halfBandNorm = (1 - barGap) / 2.0 / n;
+        final catIdx = (normY * n).floor().clamp(0, n - 1);
+        final catNormCenter = (catIdx + 0.5) / n;
+        if ((normY - catNormCenter).abs() > halfBandNorm) return [];
+        final category = categories[catIdx];
+        Map<String, dynamic>? hitRow;
+        for (final row in panelData) {
+          if (row['x'] != category) continue;
+          final yVal = row['y'];
+          if (yVal is! num) continue;
+          final barValue = yVal.toDouble();
+          final valueLow = barValue >= 0 ? 0.0 : barValue;
+          final valueHigh = barValue >= 0 ? barValue : 0.0;
+          if (row.containsKey('bar_width')) {
+            final w = (row['bar_width'] as num).toDouble();
+            final halfW = (w / 2) / n;
+            if ((normY - catNormCenter).abs() > halfW) continue;
+          }
+          if (cursorDataValue >= valueLow && cursorDataValue <= valueHigh) {
+            hitRow = row;
+            break;
+          }
+        }
+        if (hitRow == null) return [];
+        return _buildTooltipElements(size, hitRow, anchor);
+      }
+
+      // ── Standard scatter/bar selection ───────────────────────────────────
+      if (selectedTuples.isEmpty) return [];
+      final tuple = selectedTuples.values.first;
+      return _buildTooltipElements(size, tuple, anchor);
+    };
+  }
+
+  Widget _buildSubplotPanel(
+    _SubplotSpec spec,
+    double totalW,
+    double totalH,
+    String visibilityKey,
+  ) {
+    // Pixel insets from each edge of the full chart area.
+    // xDomain / yDomain are in normalized coords: 0 = left/bottom, 1 = right/top.
+    // Flutter's Positioned uses insets from the top/bottom edges.
+    final left = spec.xDomain.$1.toDouble() * totalW;
+    final right = (1.0 - spec.xDomain.$2.toDouble()) * totalW;
+    final top = (1.0 - spec.yDomain.$2.toDouble()) * totalH;
+    final bottom = spec.yDomain.$1.toDouble() * totalH;
+
+    final subW = totalW - left - right;
+    final subH = totalH - top - bottom;
+
+    // ── Save / override instance state ─────────────────────────────────────
+    final savedDomainX = _domainX;
+    final savedDomainY = _domainY;
+    final savedData = data;
+    final savedHasFill = _hasFill;
+    final savedHasBarWidths = _hasBarWidths;
+    final savedHasHorizontalBars = _hasHorizontalBars;
+
+    final result = buildChartData(spec.traces, layout: widget.layout);
+    _domainX = result.domainX;
+    _domainY = result.domainY;
+    _hasFill = result.hasFill;
+    _hasBarWidths = result.hasBarWidths;
+    _hasHorizontalBars = result.hasHorizontalBars;
+    data = result.data;
+
+    // ── Padding / sizing for this panel ────────────────────────────────────
+    final subLeftPad = _computeLeftPad();
+    const subTopPad = 5.0;
+    const subBottomPad = 40.0;
+    const subRightPad = 10.0;
+    final usableW = subW - subLeftPad - subRightPad;
+    final usableH = subH - subTopPad - subBottomPad;
+
+    // ── Variables & marks ──────────────────────────────────────────────────
+    final variables = buildChartVariables(
+      data,
+      domainX: _domainX,
+      domainY: _domainY,
+      includeYFill: _hasFill,
+      includeBarRange: _hasBarWidths,
+    );
+    final marks = makeMarks(
+      spec.traces,
+      chartWidth: usableW,
+      chartHeight: usableH,
+    );
+
+    final subKey = '${spec.xAxisId}_${spec.yAxisId}_$visibilityKey';
+
+    // ── Per-panel gesture stream and hover tracking ────────────────────────
+    final panelKey = '${spec.xAxisId}_${spec.yAxisId}';
+    final panelCtrl = _subplotGestureControllers.putIfAbsent(panelKey, () {
+      final ctrl = StreamController<g.GestureEvent>.broadcast();
+      ctrl.stream.listen((event) {
+        if (event.gesture.type == g.GestureType.hover) {
+          _subplotHoverPositions[panelKey] = event.gesture.localPosition;
+        }
+      });
+      return ctrl;
+    });
+
+    // Capture panel state for the tooltip renderer before restoration.
+    final panelData = List<Map<String, dynamic>>.from(data);
+    final panelDomainX = _domainX;
+    final panelDomainY = _domainY;
+    final panelHasBarWidths = _hasBarWidths;
+    final panelHasHorizontalBars = _hasHorizontalBars;
+
+    final tooltipRenderer = _makeSubplotTooltipRenderer(
+      panelData: panelData,
+      panelDomainX: panelDomainX,
+      panelDomainY: panelDomainY,
+      panelHasBarWidths: panelHasBarWidths,
+      panelHasHorizontalBars: panelHasHorizontalBars,
+      panelTraces: spec.traces,
+      panelKey: panelKey,
+      leftPad: subLeftPad,
+      topPad: subTopPad,
+      bottomPad: subBottomPad,
+      rightPad: subRightPad,
+    );
+
+    final hasBarInPanel = spec.traces.any((t) => t is BarTrace);
+    final isHoriz = _hasHorizontalBars;
+    final chart = g.Chart(
+      key: ValueKey(subKey),
+      padding: (_) =>
+          EdgeInsets.fromLTRB(subLeftPad, subTopPad, subRightPad, subBottomPad),
+      data: data,
+      variables: variables,
+      marks: marks,
+      coord: g.RectCoord(
+        horizontalRange: [0, 1],
+        verticalRange: [0, 1],
+        transposed: isHoriz,
+      ),
+      axes: isHoriz
+          ? [
+              g.AxisGuide(
+                grid: g.Defaults.strokeStyle,
+                label: g.LabelStyle(
+                  textStyle: Defaults.textStyle.copyWith(color: Colors.black),
+                  offset: const Offset(-7.5, 0),
+                ),
+              ),
+              g.AxisGuide(
+                grid: g.Defaults.strokeStyle,
+                label: g.LabelStyle(
+                  textStyle: Defaults.textStyle.copyWith(color: Colors.black),
+                  offset: const Offset(0, 7.5),
+                ),
+              ),
+            ]
+          : [
+              g.AxisGuide(
+                grid: g.Defaults.strokeStyle,
+                label: g.LabelStyle(
+                  textStyle: Defaults.textStyle.copyWith(color: Colors.black),
+                  offset: const Offset(0, 7.5),
+                ),
+              ),
+              g.AxisGuide(
+                grid: g.Defaults.strokeStyle,
+                label: g.LabelStyle(
+                  textStyle: Defaults.textStyle.copyWith(color: Colors.black),
+                  offset: const Offset(-7.5, 0),
+                ),
+              ),
+            ],
+      selections: {
+        'tooltipMouse': hasBarInPanel
+            ? g.PointSelection(
+                on: {g.GestureType.hover},
+                dim: g.Dim.x,
+                nearest: true,
+                variable: 'x',
+                devices: {PointerDeviceKind.mouse},
+              )
+            : g.PointSelection(
+                on: {g.GestureType.hover},
+                nearest: false,
+                testRadius: 15.0,
+                devices: {PointerDeviceKind.mouse},
+              ),
+      },
+      tooltip: g.TooltipGuide(renderer: tooltipRenderer),
+      gestureStream: panelCtrl,
+    );
+
+    // ── Restore instance state ─────────────────────────────────────────────
+    _domainX = savedDomainX;
+    _domainY = savedDomainY;
+    data = savedData;
+    _hasFill = savedHasFill;
+    _hasBarWidths = savedHasBarWidths;
+    _hasHorizontalBars = savedHasHorizontalBars;
+
+    return Positioned(
+      left: left,
+      right: right,
+      top: top,
+      bottom: bottom,
+      child: chart,
+    );
+  }
+
+  /// Builds the full subplot area (a [Stack] of positioned [g.Chart] widgets).
+  Widget _buildSubplotArea(BoxConstraints constraints, String visibilityKey) {
+    final totalW = constraints.maxWidth;
+    final totalH = constraints.maxHeight;
+    final specs = _computeSubplotSpecs();
+    return Stack(
+      children: [
+        for (final spec in specs)
+          _buildSubplotPanel(spec, totalW, totalH, visibilityKey),
+      ],
+    );
+  }
+
   Widget chartArea({
     required double usableWidth,
     required double usableHeight,
@@ -1372,21 +1827,10 @@ class _ChartState extends State<Chart> {
 
   @override
   Widget build(BuildContext context) {
-    data = makeData(widget.traces);
-    final variables = makeVariables(
-      data,
-      domainX: _filteredDomainX,
-      domainY: _filteredDomainY,
-    );
     final visibilityKey =
         '${widget.traces.map((t) => t.visible.toString()).join('-')}'
         '|$_filteredDomainX|$_filteredDomainY';
     final chartTitle = widget.layout.title?.text ?? '';
-    final xAxisTitle = widget.layout.xAxis?.title?.text ?? '';
-    final yAxisTitle = widget.layout.yAxis?.title?.text ?? '';
-    final yAxis2Title = widget.layout.yAxis2?.title?.text ?? '';
-    final yAxis2Color =
-        widget.layout.yAxis2?.title?.style?.color ?? Colors.black;
     final showLegend =
         widget.layout.showLegend &&
         (widget.layout.legend?.visible ?? true) &&
@@ -1399,6 +1843,97 @@ class _ChartState extends State<Chart> {
     final legendAtTop = showLegend && legendSide == Side.top;
     final legendAtBottom = showLegend && legendSide == Side.bottom;
     final legendAtRight = showLegend && legendSide == Side.right;
+
+    // ── Subplot mode ────────────────────────────────────────────────────────
+    // When the layout has a grid or traces are assigned to multiple x-axes,
+    // render each (xAxis, yAxis) group as an independent g.Chart positioned
+    // inside a Stack.
+    if (_isSubplotMode) {
+      // Initialise late / mutable fields so helpers don't throw before the
+      // first _buildSubplotPanel() call sets them properly.
+      data = [];
+      _domainX = (0, 1);
+      _domainY = (0, 1);
+      _hasFill = false;
+      _hasBarWidths = false;
+      _hasHorizontalBars = false;
+      _dataSecondary = [];
+      _xIsDateTime = false;
+
+      return Column(
+        mainAxisSize: MainAxisSize.max,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (chartTitle.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4.0),
+              child: Text(
+                chartTitle,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          if (legendAtTop)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4.0),
+              child: _buildLegend(
+                horizontal: true,
+                mainAxisAlignment: legendMainAxis,
+                crossAxisAlignment: legendCrossAxis,
+              ),
+            ),
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) =>
+                        _buildSubplotArea(constraints, visibilityKey),
+                  ),
+                ),
+                if (legendAtRight)
+                  IntrinsicWidth(
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 8.0, top: 8.0),
+                      child: _buildLegend(
+                        horizontal: false,
+                        mainAxisAlignment: legendMainAxis,
+                        crossAxisAlignment: legendCrossAxis,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if (legendAtBottom)
+            Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: _buildLegend(
+                horizontal: true,
+                mainAxisAlignment: legendMainAxis,
+                crossAxisAlignment: legendCrossAxis,
+              ),
+            ),
+        ],
+      );
+    }
+
+    // ── Single-chart (non-subplot) mode ─────────────────────────────────────
+    data = makeData(widget.traces);
+    final variables = makeVariables(
+      data,
+      domainX: _filteredDomainX,
+      domainY: _filteredDomainY,
+    );
+    final xAxisTitle = widget.layout.xAxis?.title?.text ?? '';
+    final yAxisTitle = widget.layout.yAxis?.title?.text ?? '';
+    final yAxis2Title = widget.layout.yAxis2?.title?.text ?? '';
+    final yAxis2Color =
+        widget.layout.yAxis2?.title?.style?.color ?? Colors.black;
     // When a secondary y-axis is present, increase right padding so the
     // right-side axis labels have room and both charts stay aligned.
     final double chartRightPad = _hasSecondaryYAxis ? 40.0 : 10.0;
@@ -1459,7 +1994,7 @@ class _ChartState extends State<Chart> {
                                 Expanded(
                                   child: LayoutBuilder(
                                     builder: (context, constraints) {
-                                      const leftPad = 40.0;
+                                      final leftPad = _computeLeftPad();
                                       const topPad = 5.0;
                                       const bottomPad = 40.0;
                                       final rightPad = chartRightPad;

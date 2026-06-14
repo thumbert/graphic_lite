@@ -5,9 +5,9 @@ TODO:
  - Add example of various line types
  - Experiment with chart reactivity    
  - Consider writing golden tests?  
- - Implement explicit widths for bar traces using the width argument in the trace data.
- - Have multiple plots on the same chart, for example how the nodal marks chart looks 
-   in isone_nodal_marks/ docs.
+
+# 2026-06-14 (version 0.1.0)
+- Implement subplots. 
 
 # 2026-05-31
 - Implement horizontal bar charts.

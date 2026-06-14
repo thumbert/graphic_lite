@@ -45,6 +45,8 @@ flutter:
     - lib/examples/line_chart_bar_chart.dart
     - lib/examples/simple_scatter_plot.dart
     - lib/examples/simple_text_annotation.dart
+    - lib/examples/subplot_custom_sized.dart
+    - lib/examples/subplot_simple.dart
     - lib/examples/two_y_axes.dart
 
 

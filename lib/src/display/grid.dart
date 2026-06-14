@@ -1,5 +1,10 @@
+/// "coupled" gives one x axis per column and one y axis per row. "independent" 
+/// uses a new xy pair for each cell, left-to-right across each row then 
+/// iterating rows according to [rowOrder].
 enum GridPattern { independent, coupled }
 
+/// Is the first row the top or the bottom? Note that columns are always 
+/// enumerated from left to right.
 enum GridRowOrder { topToBottom, bottomToTop }
 
 class Grid {

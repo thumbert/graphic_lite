@@ -1,5 +1,4 @@
 import 'package:flutter/painting.dart';
-import 'package:flutter/gestures.dart';
 import 'package:graphic/graphic.dart';
 
 class Defaults {

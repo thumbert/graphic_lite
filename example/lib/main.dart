@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:gallery/examples/bar_chart_horizontal.dart';
 import 'package:gallery/examples/bar_chart_individual_widths.dart';
 import 'package:gallery/examples/line_chart_bar_chart.dart';
+import 'package:gallery/examples/subplot_custom_sized.dart';
+import 'package:gallery/examples/subplot_simple.dart';
 import 'package:gallery/examples/two_y_axes.dart';
 import 'package:syntax_highlight/syntax_highlight.dart';
 
@@ -16,6 +18,8 @@ import 'examples/bar_chart_stacked.dart';
 
 late final Highlighter _dartLightHighlighter;
 
+/// NOTE: This app only works for web.  Linux gets confused with the highlighter 
+/// package and fails.  
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Highlighter.initialize(['dart']);
@@ -76,6 +80,8 @@ class GalleryCharts extends State<MyHomePage> {
     ('Bar Chart with different widths', 'bar_chart_individual_widths.dart'),
     ('Line Chart and Bar Chart', 'line_chart_bar_chart.dart'),
     ('Simple Text Annotation', 'simple_text_annotation.dart'),
+    ('Subplot Simple', 'subplot_simple.dart'),
+    ('Subplot Custom Sized', 'subplot_custom_sized.dart'),
   ];
 
   String extractContent(String src) {
@@ -141,6 +147,16 @@ class GalleryCharts extends State<MyHomePage> {
       case 'Simple Text Annotation':
         widgets = [
           SizedBox(width: 800, height: 500, child: simpleTextAnnotation()),
+        ];
+        break;
+      case 'Subplot Simple':
+        widgets = [
+          SizedBox(width: 800, height: 500, child: subplotSimple()),  
+        ];
+        break;
+      case 'Subplot Custom Sized':
+        widgets = [
+          SizedBox(width: 800, height: 500, child: subplotCustomSized()),  
         ];
         break;
       default:

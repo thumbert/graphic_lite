@@ -12,3 +12,4 @@ Chart horizontalBarChart() {
     ],
   );
 }
+

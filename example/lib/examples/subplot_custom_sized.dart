@@ -1,6 +1,6 @@
 import 'package:graphic_lite/graphic_lite.dart';
 /// https://plotly.com/javascript/subplots/#custom-sized-subplot
-Chart simpleSubplot() {
+Chart subplotCustomSized() {
   final traces = [
     ScatterTrace(
       x: [1, 2, 3],
