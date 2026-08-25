@@ -3,5 +3,5 @@
 release:
     cd example
     flutter build web --base-href="/graphic-lite/"
-    rm -r ~/Software/Apps/public/blog/graphic-lite
+    rm -r ~/Software/Apps/public/blog/graphic-lite/*
     cp -r build/web/* ~/Software/Apps/public/blog/graphic-lite
